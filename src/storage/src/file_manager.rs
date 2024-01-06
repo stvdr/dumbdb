@@ -1,12 +1,50 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, Read, Seek, SeekFrom, Write};
+use std::mem::size_of;
 use std::os::macos::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
+use byteorder::{ByteOrder, LittleEndian};
 
 pub const PAGE_SIZE: usize = 4096;
 const HEADER_SIZE: usize = PAGE_SIZE;
+
+pub trait WriteToPage {
+    fn write_to_page(&self, page: &mut Page, offset: usize);
+}
+
+pub trait ReadFromPage {
+    fn read_from_page(&self, page: &Page, offset: usize) -> Self;
+}
+
+impl WriteToPage for u32 {
+    fn write_to_page(&self, page: &mut Page, offset: usize) {
+        let size = size_of::<self>();
+        LittleEndian::write_u32(&mut page.data[offset..offset + size], *self);
+    }
+}
+
+impl ReadFromPage for u32 {
+    fn read_from_page(&self, page: &Page, offset: usize) -> u32 {
+        let size = size_of::<self>();
+        LittleEndian::read_u32(&page.data[offset..offset + size])
+    }
+}
+
+impl WriteToPage for u64 {
+    fn write_to_page(&self, page: &mut Page, offset: usize) {
+        let size = size_of::<self>();
+        LittleEndian::write_u64(&mut page.data[offset..offset + size], *self);
+    }
+}
+
+impl ReadFromPage for u64 {
+    fn read_from_page(&self, page: &Page, offset: usize) -> u64 {
+        let size = size_of::<self>();
+        LittleEndian::read_u64(&page.data[offset..offset + size])
+    }
+}
 
 // Page is a block that has been pulled into a memory buffer.
 pub struct Page {
@@ -18,6 +56,10 @@ impl Page {
         Page {
             data: [0; PAGE_SIZE],
         }
+    }
+
+    pub fn write_at_offset<T: WriteToPage>(&mut self, data: T, offset: usize) {
+        data.write_to_page(&mut self, offset);
     }
 }
 
@@ -201,7 +243,6 @@ mod tests {
                 let mut new_page = Page::new();
                 file_mgr.get_block(&block_id, &mut new_page).unwrap();
                 assert_eq!(page.data, new_page.data);
-
             }
 
             assert_eq!(3, file_mgr.num_blocks(&file_name).unwrap());
