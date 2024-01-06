@@ -1,48 +1,64 @@
+use byteorder::{ByteOrder, LittleEndian};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
-use std::os::macos::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
-use byteorder::{ByteOrder, LittleEndian};
 
 pub const PAGE_SIZE: usize = 4096;
 const HEADER_SIZE: usize = PAGE_SIZE;
 
 pub trait WriteToPage {
-    fn write_to_page(&self, page: &mut Page, offset: usize);
+    fn write(&self, page: &mut Page, offset: usize);
+    fn write_backwards(&self, pag: &mut Page, offset: usize);
 }
 
 pub trait ReadFromPage {
-    fn read_from_page(&self, page: &Page, offset: usize) -> Self;
+    fn read(page: &Page, offset: usize) -> Self;
 }
 
-impl WriteToPage for u32 {
-    fn write_to_page(&self, page: &mut Page, offset: usize) {
-        let size = size_of::<self>();
-        LittleEndian::write_u32(&mut page.data[offset..offset + size], *self);
+macro_rules! impl_endian_io_traits {
+    ($t:ty, $write_fn:ident, $read_fn:ident) => {
+        impl WriteToPage for $t {
+            fn write(&self, page: &mut Page, offset: usize) {
+                let size = size_of::<Self>();
+                LittleEndian::$write_fn(&mut page.data[offset..offset + size], *self);
+            }
+
+            fn write_backwards(&self, page: &mut Page, offset: usize) {
+                let size = size_of::<Self>();
+                LittleEndian::$write_fn(&mut page.data[offset - size..offset], *self);
+            }
+        }
+
+        impl ReadFromPage for $t {
+            fn read(page: &Page, offset: usize) -> Self {
+                let size = size_of::<Self>();
+                LittleEndian::$read_fn(&page.data[offset..offset + size])
+            }
+        }
+    };
+}
+
+impl_endian_io_traits!(u16, write_u16, read_u16);
+impl_endian_io_traits!(i16, write_i16, read_i16);
+impl_endian_io_traits!(u32, write_u32, read_u32);
+impl_endian_io_traits!(i32, write_i32, read_i32);
+impl_endian_io_traits!(u64, write_u64, read_u64);
+impl_endian_io_traits!(i64, write_i64, read_i64);
+
+impl WriteToPage for &[u8] {
+    fn write(&self, page: &mut Page, offset: usize) {
+        (self.len() as u32).write(page, offset);
+        let start = offset + size_of::<u32>();
+        page.data[start..start + self.len()].copy_from_slice(self);
     }
-}
 
-impl ReadFromPage for u32 {
-    fn read_from_page(&self, page: &Page, offset: usize) -> u32 {
-        let size = size_of::<self>();
-        LittleEndian::read_u32(&page.data[offset..offset + size])
-    }
-}
-
-impl WriteToPage for u64 {
-    fn write_to_page(&self, page: &mut Page, offset: usize) {
-        let size = size_of::<self>();
-        LittleEndian::write_u64(&mut page.data[offset..offset + size], *self);
-    }
-}
-
-impl ReadFromPage for u64 {
-    fn read_from_page(&self, page: &Page, offset: usize) -> u64 {
-        let size = size_of::<self>();
-        LittleEndian::read_u64(&page.data[offset..offset + size])
+    fn write_backwards(&self, page: &mut Page, offset: usize) {
+        (self.len() as u32).write_backwards(page, offset);
+        let start = offset - size_of::<u32>() - self.len();
+        page.data[start..start + self.len()].copy_from_slice(self);
     }
 }
 
@@ -58,8 +74,12 @@ impl Page {
         }
     }
 
-    pub fn write_at_offset<T: WriteToPage>(&mut self, data: T, offset: usize) {
-        data.write_to_page(&mut self, offset);
+    pub fn write<T: WriteToPage>(&mut self, data: T, offset: usize) {
+        data.write(self, offset);
+    }
+
+    pub fn read<T: ReadFromPage>(&self, offset: usize) -> T {
+        T::read(self, offset)
     }
 }
 
@@ -67,15 +87,23 @@ impl Page {
 #[derive(Debug, PartialEq, Eq)]
 pub struct BlockId {
     file_id: String,
-    n: usize,
+    num: usize,
 }
 
 impl BlockId {
     pub fn new(file_id: &str, n: usize) -> Self {
         BlockId {
             file_id: file_id.to_string(),
-            n,
+            num: n,
         }
+    }
+
+    pub fn file_id(&self) -> &str {
+        &self.file_id
+    }
+
+    pub fn num(&self) -> usize {
+        self.num
     }
 }
 
@@ -83,7 +111,7 @@ impl Default for BlockId {
     fn default() -> Self {
         Self {
             file_id: String::new(),
-            n: 0,
+            num: 0,
         }
     }
 }
@@ -96,7 +124,10 @@ pub struct FileManager {
 impl FileManager {
     pub fn new(root_directory: &Path) -> Self {
         if !root_directory.exists() {
-            panic!("Directory does not exist: {}", root_directory.to_string_lossy());
+            panic!(
+                "Directory does not exist: {}",
+                root_directory.to_string_lossy()
+            );
         }
 
         Self {
@@ -106,7 +137,7 @@ impl FileManager {
     }
 
     fn get_file_position(bid: &BlockId) -> u64 {
-        (bid.n * PAGE_SIZE + HEADER_SIZE) as u64
+        (bid.num * PAGE_SIZE + HEADER_SIZE) as u64
     }
 
     fn get_block_file(&self, file_id: &str) -> PathBuf {
@@ -159,22 +190,26 @@ impl FileManager {
 
         {
             let mut files = self.files.write().unwrap();
-            file = files.entry(file_id.to_string()).or_insert_with_key(|f| {
-                let file_path = self.get_block_file(f);
+            file = files
+                .entry(file_id.to_string())
+                .or_insert_with_key(|f| {
+                    let file_path = self.get_block_file(f);
 
-                // TODO: error handling inside closure
-                let mut file = OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .open(file_path).unwrap();
+                    // TODO: error handling inside closure
+                    let mut file = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .open(file_path)
+                        .unwrap();
 
-                // Write the header to the file
-                let buf: [u8; HEADER_SIZE] = [0; HEADER_SIZE];
-                file.write_all(&buf).unwrap();
+                    // Write the header to the file
+                    let buf: [u8; HEADER_SIZE] = [0; HEADER_SIZE];
+                    file.write_all(&buf).unwrap();
 
-                Arc::new(Mutex::new(file))
-            }).clone();
+                    Arc::new(Mutex::new(file))
+                })
+                .clone();
         }
 
         let mut file = file.lock().unwrap();
@@ -185,19 +220,23 @@ impl FileManager {
 
         Ok(BlockId {
             file_id: file_id.to_string(),
-            n: block_number,
+            num: block_number,
         })
     }
 
     pub fn num_blocks(&self, file_id: &str) -> Result<usize, Error> {
-        let file;
-        {
+        let file = {
             let files = self.files.read().unwrap();
-            file = files.get(file_id).expect("file not found").clone();
-        }
+            match files.get(file_id) {
+                None => {
+                    // The file is not currently managed by the filemanager
+                    return Ok(0);
+                }
+                Some(f) => f.clone(),
+            }
+        };
 
         let mut file = file.lock().unwrap();
-        //file.sync_all()?;
 
         let file_size = file.metadata().unwrap().len() as usize;
         Ok((file_size - 1) / PAGE_SIZE)
@@ -206,9 +245,8 @@ impl FileManager {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::fs::write;
     use super::*;
+    use std::fs;
     use tempfile::{tempdir, TempDir};
 
     fn setup() -> (TempDir, FileManager) {
@@ -224,6 +262,7 @@ mod tests {
 
         for f in 1..4 {
             let file_name = format!("file_{}", f);
+            assert_eq!(file_mgr.num_blocks(&file_name).unwrap(), 0);
             for b in 0..3u8 {
                 let mut page = Page::new();
                 page.data = [b; PAGE_SIZE];
@@ -231,7 +270,7 @@ mod tests {
                 // Append a new block
                 let block_id = file_mgr.append_block(&file_name, &page).unwrap();
                 file_mgr.get_block(&block_id, &mut page).unwrap();
-                assert_eq!(block_id.n, b as usize);
+                assert_eq!(block_id.num, b as usize);
                 assert_eq!(block_id.file_id, file_name);
                 assert_eq!(page.data, [b; PAGE_SIZE]);
 
@@ -249,4 +288,3 @@ mod tests {
         }
     }
 }
-
