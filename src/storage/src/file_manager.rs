@@ -14,9 +14,9 @@ pub trait WriteToPage {
     fn write_backwards(&self, pag: &mut Page, offset: usize) -> usize;
 }
 
-pub trait ReadFromPage {
-    fn read(page: &Page, offset: usize) -> Self;
-    fn read_backwards(page: &Page, offset: usize) -> Self;
+pub trait ReadFromPage<'a> {
+    fn read(page: &'a Page, offset: usize) -> Self;
+    fn read_backwards(page: &'a Page, offset: usize) -> Self;
 }
 
 macro_rules! impl_endian_io_traits {
@@ -37,7 +37,7 @@ macro_rules! impl_endian_io_traits {
             }
         }
 
-        impl ReadFromPage for $t {
+        impl ReadFromPage<'_> for $t {
             fn read(page: &Page, offset: usize) -> Self {
                 let size = size_of::<Self>();
                 LittleEndian::$read_fn(&page.data[offset..offset + size])
@@ -80,6 +80,18 @@ impl WriteToPage for &[u8] {
     }
 }
 
+impl<'a> ReadFromPage<'a> for &'a [u8] {
+    fn read(page: &'a Page, offset: usize) -> Self {
+        let length = page.read::<u32>(offset) as usize;
+        &page.data[offset + size_of::<u32>()..length + size_of::<u32>()]
+    }
+
+    fn read_backwards(page: &'a Page, offset: usize) -> Self {
+        let length = page.read_backwards::<u32>(offset) as usize;
+        &page.data[offset - size_of::<u32>() - length..offset - size_of::<u32>()]
+    }
+}
+
 // Page is a block that has been pulled into a memory buffer.
 pub struct Page {
     data: [u8; PAGE_SIZE],
@@ -92,19 +104,35 @@ impl Page {
         }
     }
 
+    /// Write data to a page at the provided offset and return the index after the last byte
+    /// written.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - Data to be written to the page.
+    /// * `offset` - The offset in the page where data will be written.
     pub fn write<T: WriteToPage>(&mut self, data: T, offset: usize) -> usize {
         data.write(self, offset)
     }
 
-    pub fn write_backwards<T: WriteToPage>(&mut self, data: T, offset: usize) -> usize {
-        data.write_backwards(self, offset)
+    /// Writes data to a page where the provided offset represents the index of the *end* of the
+    /// written data and returns the index of the first byte written.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - Data to be written to the page.
+    /// * `end_offset` - The offset in the page where the end of data should align. In other words,
+    /// if the length of the data is 4 and the end_offset is 10, the data's bytes will fill byte
+    /// indices 6, 7, 8, and 9.
+    pub fn write_backwards<T: WriteToPage>(&mut self, data: T, end_offset: usize) -> usize {
+        data.write_backwards(self, end_offset)
     }
 
-    pub fn read<T: ReadFromPage>(&self, offset: usize) -> T {
+    pub fn read<'a, T: ReadFromPage<'a>>(&'a self, offset: usize) -> T {
         T::read(self, offset)
     }
 
-    pub fn read_backwards<T: ReadFromPage>(&self, offset: usize) -> T {
+    pub fn read_backwards<'a, T: ReadFromPage<'a>>(&'a self, offset: usize) -> T {
         T::read_backwards(self, offset)
     }
 }
@@ -205,7 +233,7 @@ impl FileManager {
         file.seek(SeekFrom::Start(seek_position))?;
         file.write_all(&page.data)?;
         file.flush()?;
-        file.sync_all()?;
+        file.sync_data()?;
 
         Ok(())
     }
@@ -285,15 +313,59 @@ mod tests {
     #[test]
     fn test_write_primitive_forwards() {
         let mut page = Page::new();
-        let offset = page.write(42u32, 0);
 
-        assert_eq!(page.read::<u32>(42), 42u32);
-        assert_eq!(offset, size_of::<u32>());
+        let mut offset = 0;
+        for i in 1..10u32 {
+            let previous_offset = offset;
+            offset = page.write(i, offset);
+
+            assert_eq!(offset, size_of::<u32>() * i as usize);
+            assert_eq!(page.read::<u32>(previous_offset), i);
+        }
+
+        // Hardcoded check to make sure that the above logic is sane
+        assert_eq!(offset, 9 * size_of::<u32>());
     }
 
+    #[test]
     fn test_write_primitive_backwords() {
         let mut page = Page::new();
-        page.write_backwards(42u32, PAGE_SIZE);
+
+        let mut offset = PAGE_SIZE;
+        for i in 1..10u32 {
+            let previous_offset = offset;
+            offset = page.write_backwards(i, offset);
+
+            assert_eq!(offset, PAGE_SIZE - (size_of::<u32>() * i as usize));
+            assert_eq!(page.read_backwards::<u32>(previous_offset), i);
+        }
+
+        // Hardcoded check to make sure that the above logic is sane
+        assert_eq!(offset, PAGE_SIZE - (9 * size_of::<u32>()));
+    }
+
+    #[test]
+    fn test_write_bytes_forwards() {
+        let mut page = Page::new();
+        let bytes = [42u8; 64];
+
+        let offset = page.write(&bytes[..], 0);
+        let reread = page.read::<&[u8]>(0);
+
+        assert_eq!(offset, 68);
+        assert_eq!(bytes, reread);
+    }
+
+    #[test]
+    fn test_write_bytes_backwards() {
+        let mut page = Page::new();
+        let bytes = [42u8; 64];
+
+        let offset = page.write_backwards(&bytes[..], PAGE_SIZE);
+        let reread = page.read_backwards::<&[u8]>(PAGE_SIZE);
+
+        assert_eq!(offset, PAGE_SIZE - 68);
+        assert_eq!(bytes, reread);
     }
 
     #[test]

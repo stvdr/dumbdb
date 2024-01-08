@@ -22,7 +22,9 @@ trait ImplLogPage {
 
 impl ImplLogPage for LogPage {
     fn get_frontier(&self) -> u32 {
-        self.read_backwards(0)
+        {
+            self.read_backwards::<u32>(FRONTIER_POS)
+        }
     }
 
     fn set_frontier(&mut self, f: u32) {
