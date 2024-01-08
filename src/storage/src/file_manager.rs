@@ -10,25 +10,30 @@ pub const PAGE_SIZE: usize = 4096;
 const HEADER_SIZE: usize = PAGE_SIZE;
 
 pub trait WriteToPage {
-    fn write(&self, page: &mut Page, offset: usize);
-    fn write_backwards(&self, pag: &mut Page, offset: usize);
+    fn write(&self, page: &mut Page, offset: usize) -> usize;
+    fn write_backwards(&self, pag: &mut Page, offset: usize) -> usize;
 }
 
 pub trait ReadFromPage {
     fn read(page: &Page, offset: usize) -> Self;
+    fn read_backwards(page: &Page, offset: usize) -> Self;
 }
 
 macro_rules! impl_endian_io_traits {
     ($t:ty, $write_fn:ident, $read_fn:ident) => {
         impl WriteToPage for $t {
-            fn write(&self, page: &mut Page, offset: usize) {
+            fn write(&self, page: &mut Page, offset: usize) -> usize {
                 let size = size_of::<Self>();
-                LittleEndian::$write_fn(&mut page.data[offset..offset + size], *self);
+                let end = offset + size;
+                LittleEndian::$write_fn(&mut page.data[offset..end], *self);
+                end
             }
 
-            fn write_backwards(&self, page: &mut Page, offset: usize) {
+            fn write_backwards(&self, page: &mut Page, offset: usize) -> usize {
                 let size = size_of::<Self>();
-                LittleEndian::$write_fn(&mut page.data[offset - size..offset], *self);
+                let start = offset - size;
+                LittleEndian::$write_fn(&mut page.data[start..offset], *self);
+                start
             }
         }
 
@@ -36,6 +41,11 @@ macro_rules! impl_endian_io_traits {
             fn read(page: &Page, offset: usize) -> Self {
                 let size = size_of::<Self>();
                 LittleEndian::$read_fn(&page.data[offset..offset + size])
+            }
+
+            fn read_backwards(page: &Page, offset: usize) -> Self {
+                let size = size_of::<Self>();
+                LittleEndian::$read_fn(&page.data[offset - size..offset])
             }
         }
     };
@@ -49,16 +59,24 @@ impl_endian_io_traits!(u64, write_u64, read_u64);
 impl_endian_io_traits!(i64, write_i64, read_i64);
 
 impl WriteToPage for &[u8] {
-    fn write(&self, page: &mut Page, offset: usize) {
-        (self.len() as u32).write(page, offset);
-        let start = offset + size_of::<u32>();
-        page.data[start..start + self.len()].copy_from_slice(self);
+    fn write(&self, page: &mut Page, offset: usize) -> usize {
+        let start = (self.len() as u32).write(page, offset);
+        let end = start + self.len();
+
+        assert!(end < PAGE_SIZE);
+
+        page.data[start..end].copy_from_slice(self);
+        end
     }
 
-    fn write_backwards(&self, page: &mut Page, offset: usize) {
-        (self.len() as u32).write_backwards(page, offset);
-        let start = offset - size_of::<u32>() - self.len();
-        page.data[start..start + self.len()].copy_from_slice(self);
+    fn write_backwards(&self, page: &mut Page, offset: usize) -> usize {
+        let end = (self.len() as u32).write_backwards(page, offset);
+        let start = end - self.len();
+
+        assert!(start >= 0);
+
+        page.data[start..end].copy_from_slice(self);
+        start
     }
 }
 
@@ -74,12 +92,20 @@ impl Page {
         }
     }
 
-    pub fn write<T: WriteToPage>(&mut self, data: T, offset: usize) {
-        data.write(self, offset);
+    pub fn write<T: WriteToPage>(&mut self, data: T, offset: usize) -> usize {
+        data.write(self, offset)
+    }
+
+    pub fn write_backwards<T: WriteToPage>(&mut self, data: T, offset: usize) -> usize {
+        data.write_backwards(self, offset)
     }
 
     pub fn read<T: ReadFromPage>(&self, offset: usize) -> T {
         T::read(self, offset)
+    }
+
+    pub fn read_backwards<T: ReadFromPage>(&self, offset: usize) -> T {
+        T::read_backwards(self, offset)
     }
 }
 
@@ -254,6 +280,20 @@ mod tests {
         let root_dir = temp_dir.path().join("data");
         fs::create_dir_all(&root_dir).expect("Failed to create root directory");
         (temp_dir, FileManager::new(&root_dir))
+    }
+
+    #[test]
+    fn test_write_primitive_forwards() {
+        let mut page = Page::new();
+        let offset = page.write(42u32, 0);
+
+        assert_eq!(page.read::<u32>(42), 42u32);
+        assert_eq!(offset, size_of::<u32>());
+    }
+
+    fn test_write_primitive_backwords() {
+        let mut page = Page::new();
+        page.write_backwards(42u32, PAGE_SIZE);
     }
 
     #[test]

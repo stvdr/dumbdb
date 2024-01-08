@@ -4,21 +4,29 @@ use std::path::Path;
 
 const LOG_NAME: &str = "log";
 
-const FRONTIER_POS: usize = PAGE_SIZE - size_of::<u32>();
+type LogPage = Page;
+type frontier = u32;
+const FRONTIER_POS: usize = PAGE_SIZE;
+const FRONTIER_START: usize = PAGE_SIZE - size_of::<frontier>();
 
 pub struct LogManager {
     file_manager: FileManager,
-    page: Page,
+    page: LogPage,
     block_num: u32,
 }
 
-trait LogPage {
+trait ImplLogPage {
     fn get_frontier(&self) -> u32;
+    fn set_frontier(&mut self, f: u32);
 }
 
-impl LogPage for Page {
+impl ImplLogPage for LogPage {
     fn get_frontier(&self) -> u32 {
-        self.read(FRONTIER_POS)
+        self.read_backwards(0)
+    }
+
+    fn set_frontier(&mut self, f: u32) {
+        self.write_backwards(f, FRONTIER_POS);
     }
 }
 
@@ -29,10 +37,11 @@ impl LogManager {
         let num_blocks = file_manager.num_blocks(&LOG_NAME).unwrap();
 
         let mut page = Page::new();
+
         let block_num = if num_blocks == 0 {
             // If there are currently no blocks in the file, a new file needs to be created.
             // Create the file and set the initial frontier.
-            page.write(FRONTIER_POS as u32, FRONTIER_POS);
+            page.write_backwards((PAGE_SIZE - 4) as u32, PAGE_SIZE);
             file_manager.append_block(&LOG_NAME, &page).unwrap().num()
         } else {
             // Get the last block from
@@ -52,7 +61,8 @@ impl LogManager {
 
     fn append_block(&mut self) {
         self.page = Page::new();
-        self.page.write(FRONTIER_POS as u32, FRONTIER_POS);
+        self.page
+            .write_backwards(FRONTIER_START as u32, FRONTIER_POS);
         self.block_num = self
             .file_manager
             .append_block(&LOG_NAME, &self.page)
@@ -73,7 +83,9 @@ impl LogManager {
             self.append_block()
         }
 
-        //
+        let frontier = self.page.get_frontier();
+        let frontier = self.page.write_backwards(record, frontier as usize) as u32;
+        self.page.set_frontier(frontier);
     }
 }
 
