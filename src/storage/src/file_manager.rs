@@ -159,6 +159,23 @@ impl BlockId {
     pub fn num(&self) -> usize {
         self.num
     }
+
+    pub fn previous(&self) -> Option<BlockId> {
+        match self.num {
+            0 => None,
+            _ => Some(BlockId {
+                file_id: self.file_id.clone(),
+                num: self.num - 1,
+            }),
+        }
+    }
+
+    pub fn next(&self) -> BlockId {
+        BlockId {
+            file_id: self.file_id.clone(),
+            num: self.num + 1,
+        }
+    }
 }
 
 impl Default for BlockId {
