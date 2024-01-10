@@ -6,8 +6,8 @@ const LOG_NAME: &str = "log";
 
 type LogPage = Page;
 type Frontier = u32;
-const FRONTIER_POS: usize = PAGE_SIZE;
-const FRONTIER_START: usize = PAGE_SIZE - size_of::<Frontier>();
+const FRONTIER_POS: usize = 0;
+const FRONTIER_START: usize = size_of::<Frontier>();
 
 pub struct LogManager {
     file_manager: FileManager,
@@ -22,13 +22,11 @@ trait ImplLogPage {
 
 impl ImplLogPage for LogPage {
     fn get_frontier(&self) -> u32 {
-        {
-            self.read_backwards::<u32>(FRONTIER_POS)
-        }
+        self.read::<u32>(FRONTIER_POS)
     }
 
     fn set_frontier(&mut self, f: u32) {
-        self.write_backwards(f, FRONTIER_POS);
+        self.write(f, FRONTIER_POS);
     }
 }
 
@@ -44,7 +42,7 @@ impl LogManager {
         let block_num = if num_blocks == 0 {
             // If there are currently no blocks in the file, a new file needs to be created.
             // Create the file and set the initial frontier.
-            page.write_backwards((PAGE_SIZE - 4) as u32, PAGE_SIZE);
+            page.write(FRONTIER_START as u32, FRONTIER_POS);
             file_manager.append_block(&LOG_NAME, &page).unwrap().num()
         } else {
             // Get the last block from
@@ -64,8 +62,7 @@ impl LogManager {
 
     fn append_block(&mut self) {
         self.page = Page::new();
-        self.page
-            .write_backwards(FRONTIER_START as u32, FRONTIER_POS);
+        self.page.write(FRONTIER_START as u32, FRONTIER_POS);
         self.block_num = self
             .file_manager
             .append_block(&LOG_NAME, &self.page)
@@ -78,17 +75,21 @@ impl LogManager {
         // Otherwise, create a new block
 
         let len = record.len();
+        let mut frontier = self.page.get_frontier() as usize;
 
-        // TODO: hardcoding the value "4" here
-        // TODO: verify the math here
-        if self.page.get_frontier() < len as u32 + 4 {
-            // record won't fit in the existing page, append a new block
-            self.append_block()
+        println!("{}", frontier);
+        if frontier + len + size_of::<u32>() >= PAGE_SIZE {
+            // the record won't fit in the existing page, append a new block
+            self.flush();
+            self.append_block();
+
+            // refresh the frontier, as it will now point to the start of the newly created block
+            frontier = self.page.get_frontier() as usize;
         }
 
-        let frontier = self.page.get_frontier();
-        let frontier = self.page.write_backwards(record, frontier as usize) as u32;
-        self.page.set_frontier(frontier);
+        frontier += self.page.write_bytes(record, frontier);
+        frontier += self.page.write(len as u32, frontier);
+        self.page.set_frontier(frontier as u32);
     }
 
     pub fn flush(&self) {
@@ -117,6 +118,7 @@ impl LogManager {
     }
 }
 
+#[derive(Debug)]
 pub struct LogManagerSnapshot<'a> {
     file_manager: &'a FileManager,
     block: BlockId,
@@ -129,18 +131,25 @@ impl Iterator for LogManagerSnapshot<'_> {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_pos <= self.page.get_frontier() {
+        assert!(self.current_pos >= FRONTIER_START as u32);
+
+        if self.current_pos == FRONTIER_START as u32 {
             self.block = self.block.previous()?;
             self.page = LogPage::new();
             self.file_manager
                 .get_block(&self.block, &mut self.page)
                 .unwrap();
-            self.current_pos = FRONTIER_START as u32;
+
+            self.current_pos = self.page.get_frontier();
         }
 
+        self.current_pos -= size_of::<u32>() as u32;
+        let len = self.page.read::<u32>(self.current_pos as usize) as usize;
+        self.current_pos -= len as u32;
+
         // Read the next record
-        let r = self.page.read_backwards::<&[u8]>(self.current_pos as usize);
-        self.current_pos -= (r.len() + size_of::<u32>()) as u32;
+        let r = self.page.read_bytes(self.current_pos as usize, len);
+
         Some(r.to_vec())
     }
 }
@@ -162,18 +171,23 @@ mod tests {
 
         assert_eq!(lm.block_num, 0);
 
-        for i in 0..10u8 {
-            let record = [i; 16];
+        for i in 0..1000 {
+            println!("{}", i);
+            let record = [(i % 255) as u8; 16];
             lm.append(&record);
         }
 
+        println!("running!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+
         let snapshot = lm.snapshot();
-        let mut i = 0u8;
+
+        let mut i = 999;
         for r in snapshot {
-            assert_eq!(r, [i; 16].to_vec());
-            i += 1;
+            println!("{} ", i);
+            assert_eq!(r, [(i % 255) as u8; 16].to_vec());
+            i -= 1;
         }
 
-        assert_eq!(i, 10);
+        assert_eq!(i, -1);
     }
 }
