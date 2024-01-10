@@ -77,7 +77,6 @@ impl LogManager {
         let len = record.len();
         let mut frontier = self.page.get_frontier() as usize;
 
-        println!("{}", frontier);
         if frontier + len + size_of::<u32>() >= PAGE_SIZE {
             // the record won't fit in the existing page, append a new block
             self.flush();
@@ -113,7 +112,7 @@ impl LogManager {
             file_manager: &self.file_manager,
             block,
             page,
-            current_pos: FRONTIER_START as u32,
+            current_pos: self.page.get_frontier(),
         }
     }
 }
@@ -172,19 +171,15 @@ mod tests {
         assert_eq!(lm.block_num, 0);
 
         for i in 0..1000 {
-            println!("{}", i);
-            let record = [(i % 255) as u8; 16];
+            let record = [(i % 256) as u8; 16];
             lm.append(&record);
         }
-
-        println!("running!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 
         let snapshot = lm.snapshot();
 
         let mut i = 999;
         for r in snapshot {
-            println!("{} ", i);
-            assert_eq!(r, [(i % 255) as u8; 16].to_vec());
+            assert_eq!(r, [(i % 256) as u8; 16].to_vec());
             i -= 1;
         }
 
