@@ -88,7 +88,7 @@ impl Page {
 }
 
 // BlockId points to a block's location on disk.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct BlockId {
     file_id: String,
     num: usize,
