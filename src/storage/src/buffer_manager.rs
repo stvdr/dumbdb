@@ -3,6 +3,7 @@ use crate::{
     file_manager::{BlockId, FileManager, Page},
     log_manager::LogManager,
 };
+use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use std::collections::HashMap;
 
@@ -47,6 +48,10 @@ impl<'a> Buffer<'a> {
         self.pin_count > 0
     }
 
+    fn pin_count(&self) -> u32 {
+        self.pin_count
+    }
+
     // TODO: error handling
     fn assign_to_block(&mut self, blk: BlockId) {
         self.flush();
@@ -68,10 +73,51 @@ impl<'a> Buffer<'a> {
     }
 }
 
+// struct BufferGuard<'a> {
+//     buffer: Arc<RwLock<Buffer<'a>>>,
+// }
+//
+// enum BufferGuard<'a> {
+//     Read(RwLockReadGuard<'a, Buffer<'a>>),
+//     Write(RwLockWriteGuard<'a, Buffer<'a>>),
+// }
+//
+// impl<'a> Drop for BufferGuard<'a> {
+//     fn drop(&mut self) {
+//         match ()
+//     }
+// }
+
+// impl<'a> BufferGuard<'a> {
+//     // fn new(buffer: Arc<RwLock<Buffer<'a>>>) -> Self {
+//     //     Self { buffer }
+//     // }
+//     //
+//     // pub fn read(&self) -> LockResult<RwLockReadGuard<Buffer<'a>>> {
+//     //     self.buffer.read()
+//     // }
+//     //
+//     // pub fn write(&self) -> LockResult<RwLockWriteGuard<Buffer<'a>>> {
+//     //     self.buffer.write()
+//     // }
+//     //
+//     fn read(buffer: Arc<RwLock<Buffer<'a>>>) -> Self {
+//         Self {
+//             buffer: RwLockWriteGuard,
+//         }
+//     }
+// }
+
+// impl<'a> Drop for BufferGuard<'a> {
+//     fn drop(&mut self) {
+//         self.buffer.
+//     }
+// }
+
 struct BufferManager<'a, E: EvictionPolicy> {
     unused: Vec<usize>,
-    blk_to_buf: HashMap<BlockId, usize>,
-    buffers: Vec<Buffer<'a>>,
+    blk_to_buf: Arc<Mutex<HashMap<BlockId, usize>>>,
+    buffers: Vec<Arc<RwLock<Buffer<'a>>>>,
     eviction_policy: E,
 }
 
@@ -85,20 +131,11 @@ impl<'a, E: EvictionPolicy> BufferManager<'a, E> {
         Self {
             unused: (0..size).collect(),
             buffers: (0..size)
-                .map(|_| Buffer::new(file_manager, log_manager))
+                .map(|_| Arc::new(RwLock::new(Buffer::new(file_manager, log_manager))))
                 .collect(),
+            blk_to_buf: Arc::new(Mutex::new(HashMap::new())),
             eviction_policy,
         }
-    }
-
-    /// Find a buffer that is unused (i.e. a block has never been loaded into it)
-    fn get_unused_buffer(&mut self) -> Option<usize> {
-        self.unused.pop()
-    }
-
-    /// Find an already existing buffer that stores the specified block
-    fn get_existing_buffer(&mut self, blk: &BlockId) -> Option<usize> {
-        self.blk_to_buf.get(&blk);
     }
 
     /// Evict a block from a buffer to get a free buffer
@@ -106,38 +143,61 @@ impl<'a, E: EvictionPolicy> BufferManager<'a, E> {
         self.eviction_policy.evict()
     }
 
-    pub fn pin(&mut self, blk: &BlockId) -> &Buffer {
-        let (buf, mut buffer) = match self.get_existing_buffer(&blk) {
-            Some(buf) => (buf, self.buffers[buf]),
+    // TODO: Error Checking
+    pub fn pin(&'a mut self, blk: &BlockId) -> Arc<RwLock<Buffer<'a>>> {
+        let arc = Arc::clone(&self.blk_to_buf);
+        let mut btb = arc.lock().unwrap();
+
+        let buf_index = match btb.get(&blk) {
+            Some(buf_index) => {
+                let arc = Arc::clone(&self.buffers[*buf_index]);
+                let mut buf = arc.write().unwrap();
+                buf.pin();
+                *buf_index
+            }
             None => {
-                let buf = self
-                    .get_unused_buffer()
+                let buf_index = self
+                    .unused
+                    .pop()
                     .or_else(|| self.get_evicted_buffer())
+                    // TODO: condition variable to notify waiting threads on buffer availability
                     .expect("No available buffers");
 
-                let mut buffer = self.buffers[buf];
+                let arc = Arc::clone(&self.buffers[buf_index]);
+                let mut buffer = arc.write().expect("Unable to write lock unused buffer");
 
                 // If the buffer was already holding a block, make sure we are no longer mapping
                 // the block to a buffer
-                if let Some(block_id) = buffer.blk {
-                    self.blk_to_buf.remove(&block_id);
+                if let Some(block_id) = &buffer.blk {
+                    btb.remove(&block_id);
                 }
 
                 buffer.assign_to_block(blk.clone());
-                (buf, buffer)
+                buffer.pin();
+                buf_index
             }
         };
 
-        buffer.pin();
-
         // The page is no longer evictable, it has been pinned
-        self.eviction_policy.remove(buf);
+        self.eviction_policy.remove(buf_index);
 
-        &buffer
+        Arc::clone(&self.buffers[buf_index])
     }
 
+    // TODO: error checking
     pub fn unpin(&mut self, buffer: &mut Buffer) {
+        let arc = Arc::clone(&self.blk_to_buf);
+        let mut btb = arc.lock().unwrap();
+
         buffer.unpin();
+
+        if !buffer.is_pinned() {
+            let b = buffer.blk.as_ref().unwrap();
+
+            if let Some((_blk, buf_index)) = btb.remove_entry(b) {
+                self.eviction_policy.add(buf_index);
+            }
+        }
     }
 }
 
@@ -145,5 +205,5 @@ impl<'a, E: EvictionPolicy> BufferManager<'a, E> {
 mod tests {
 
     #[test]
-    fn test() {}
+    fn test_pin() {}
 }
