@@ -3,10 +3,16 @@ name = "storage"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+debug = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 byteorder = "1"
+log = "0.4"
+env_logger = "0.9"
 
 [dev-dependencies]
 tempfile = "3.0"
+env_logger = "0.9"

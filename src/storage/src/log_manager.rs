@@ -1,18 +1,26 @@
 use crate::file_manager::{BlockId, FileManager, Page, PAGE_SIZE};
 use std::mem::size_of;
 use std::path::Path;
+use std::sync::Arc;
 
 const LOG_NAME: &str = "log";
 
 type LogPage = Page;
 type Frontier = u32;
+type RecordLength = u32;
+
+// The position in the page where the current frontier is recorded
 const FRONTIER_POS: usize = 0;
+
+// The initial value of the frontier
 const FRONTIER_START: usize = size_of::<Frontier>();
 
 pub struct LogManager {
-    file_manager: FileManager,
+    file_manager: Arc<FileManager>,
     page: LogPage,
-    block_num: u32,
+    block_num: u64,
+    latest_lsn: i64,
+    last_saved_lsn: i64,
 }
 
 trait ImplLogPage {
@@ -33,7 +41,7 @@ impl ImplLogPage for LogPage {
 // TODO: error handling
 impl LogManager {
     pub fn new(root_directory: &Path) -> Self {
-        let file_manager = FileManager::new(root_directory);
+        let file_manager = Arc::new(FileManager::new(root_directory));
 
         let num_blocks = file_manager.num_blocks(&LOG_NAME).unwrap();
 
@@ -56,7 +64,9 @@ impl LogManager {
         LogManager {
             file_manager,
             page,
-            block_num: block_num as u32,
+            block_num: block_num,
+            latest_lsn: 0,
+            last_saved_lsn: 0,
         }
     }
 
@@ -67,49 +77,67 @@ impl LogManager {
             .file_manager
             .append_block(&LOG_NAME, &self.page)
             .unwrap()
-            .num() as u32;
+            .num();
     }
 
+    /// Append a record to the log
+    ///
+    /// # Arguments
+    ///
+    /// * `record` - Bytes that will be written to the log
     pub fn append(&mut self, record: &[u8]) {
         // If the record will fit in the existing page, place it there and update the frontier
         // Otherwise, create a new block
+        let len = record.len() as u64;
+        assert!(len < PAGE_SIZE, "record does not fit in a single page!");
 
-        let len = record.len();
-        let mut frontier = self.page.get_frontier() as usize;
+        let mut frontier = self.page.get_frontier();
 
-        if frontier + len + size_of::<u32>() >= PAGE_SIZE {
+        if frontier as u64 + len + size_of::<RecordLength>() as u64 >= PAGE_SIZE {
             // the record won't fit in the existing page, append a new block
-            self.flush();
+            self.flush_all();
             self.append_block();
 
             // refresh the frontier, as it will now point to the start of the newly created block
-            frontier = self.page.get_frontier() as usize;
+            frontier = self.page.get_frontier();
         }
 
-        frontier += self.page.write_bytes(record, frontier);
-        frontier += self.page.write(len as u32, frontier);
-        self.page.set_frontier(frontier as u32);
+        frontier += self.page.write_bytes(record, frontier as usize) as u32;
+        frontier += self.page.write(len as RecordLength, frontier as usize) as u32;
+        self.page.set_frontier(frontier as RecordLength);
+        self.latest_lsn += 1;
     }
 
-    pub fn flush(&self) {
+    /// Flushes all log records to durable storage.
+    pub fn flush(&mut self, lsn: i64) {
+        if self.latest_lsn >= lsn {
+            return;
+        }
+
+        self.flush_all();
+    }
+
+    fn flush_all(&mut self) {
         self.file_manager
-            .write_block(
-                &BlockId::new(&LOG_NAME, self.block_num as usize),
-                &self.page,
-            )
+            .write_block(&BlockId::new(&LOG_NAME, self.block_num), &self.page)
             .unwrap();
+
+        self.last_saved_lsn = self.latest_lsn;
     }
 
-    pub fn snapshot(&self) -> LogManagerSnapshot {
-        self.flush();
+    /// Gets a snapshot of the log that can be iterated over.
+    ///
+    /// Creating a snapshot will cause the log to be flushed.
+    pub fn snapshot(&mut self) -> LogManagerSnapshot {
+        self.flush_all();
 
         // TODO: block_num should prob not be a usize?
-        let block = BlockId::new(LOG_NAME, self.block_num as usize);
+        let block = BlockId::new(LOG_NAME, self.block_num);
         let mut page = Page::new();
         self.file_manager.get_block(&block, &mut page).unwrap();
 
         LogManagerSnapshot {
-            file_manager: &self.file_manager,
+            file_manager: Arc::clone(&self.file_manager),
             block,
             page,
             current_pos: self.page.get_frontier(),
@@ -118,15 +146,15 @@ impl LogManager {
 }
 
 #[derive(Debug)]
-pub struct LogManagerSnapshot<'a> {
-    file_manager: &'a FileManager,
+pub struct LogManagerSnapshot {
+    file_manager: Arc<FileManager>,
     block: BlockId,
     page: LogPage,
     current_pos: u32,
 }
 
 // TODO: error handling
-impl Iterator for LogManagerSnapshot<'_> {
+impl Iterator for LogManagerSnapshot {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -142,8 +170,8 @@ impl Iterator for LogManagerSnapshot<'_> {
             self.current_pos = self.page.get_frontier();
         }
 
-        self.current_pos -= size_of::<u32>() as u32;
-        let len = self.page.read::<u32>(self.current_pos as usize) as usize;
+        self.current_pos -= size_of::<RecordLength>() as u32;
+        let len = self.page.read::<RecordLength>(self.current_pos as usize) as usize;
         self.current_pos -= len as u32;
 
         // Read the next record
@@ -165,7 +193,45 @@ mod tests {
         let td = tempdir().unwrap();
         let root_dir = td.path().join("data");
         fs::create_dir_all(&root_dir).expect("Failed to create root directory");
+        {
+            let mut lm = LogManager::new(&root_dir);
 
+            assert_eq!(lm.block_num, 0);
+
+            for i in 0..1000 {
+                let record = [(i % 256) as u8; 16];
+                lm.append(&record);
+            }
+
+            let snapshot = lm.snapshot();
+
+            let mut i = 999;
+            for r in snapshot {
+                assert_eq!(r, [(i % 256) as u8; 16].to_vec());
+                i -= 1;
+            }
+
+            assert_eq!(i, -1);
+
+            lm.flush(1000);
+        }
+
+        let mut lm = LogManager::new(&root_dir);
+        let snapshot = lm.snapshot();
+        let mut i = 999;
+        for r in snapshot {
+            assert_eq!(r, [(i % 256) as u8; 16].to_vec());
+            i -= 1;
+        }
+
+        assert_eq!(i, -1);
+    }
+
+    #[test]
+    fn test_multi_snapshot() {
+        let td = tempdir().unwrap();
+        let root_dir = td.path().join("data");
+        fs::create_dir_all(&root_dir).expect("Failed to create root directory");
         let mut lm = LogManager::new(&root_dir);
 
         assert_eq!(lm.block_num, 0);
@@ -175,14 +241,36 @@ mod tests {
             lm.append(&record);
         }
 
-        let snapshot = lm.snapshot();
+        let snapshot1 = lm.snapshot();
+        let snapshot2 = lm.snapshot();
 
         let mut i = 999;
-        for r in snapshot {
+        for r in snapshot1 {
             assert_eq!(r, [(i % 256) as u8; 16].to_vec());
             i -= 1;
         }
+        assert_eq!(i, -1);
 
+        for i in 1000..1500 {
+            let record = [(i % 256) as u8; 16];
+            lm.append(&record);
+        }
+
+        // Take a new snapshot after adding an additional 500 records
+        let snapshot3 = lm.snapshot();
+        let mut i = 1499;
+        for r in snapshot3 {
+            assert_eq!(r, [(i % 256) as u8; 16].to_vec());
+            i -= 1;
+        }
+        assert_eq!(i, -1);
+
+        // Iterate through one of the snapshots created before adding more records
+        i = 999;
+        for r in snapshot2 {
+            assert_eq!(r, [(i % 256) as u8; 16].to_vec());
+            i -= 1;
+        }
         assert_eq!(i, -1);
     }
 }

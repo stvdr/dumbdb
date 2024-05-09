@@ -15,7 +15,7 @@ pub struct SimpleEvictionPolicy {
 }
 
 impl SimpleEvictionPolicy {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self { frames: Vec::new() }
     }
 }

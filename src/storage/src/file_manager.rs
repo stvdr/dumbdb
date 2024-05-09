@@ -1,4 +1,5 @@
 use byteorder::{ByteOrder, LittleEndian};
+use core::fmt;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, Read, Seek, SeekFrom, Write};
@@ -6,8 +7,8 @@ use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
-pub const PAGE_SIZE: usize = 4096;
-const HEADER_SIZE: usize = PAGE_SIZE;
+pub const PAGE_SIZE: u64 = 128;
+const HEADER_SIZE: u64 = PAGE_SIZE;
 
 pub trait WriteTypeToPage {
     fn write(&self, page: &mut Page, offset: usize) -> usize;
@@ -47,14 +48,19 @@ impl_endian_io_traits!(i64, write_i64, read_i64);
 // Page is a block that has been pulled into a memory buffer.
 #[derive(Debug)]
 pub struct Page {
-    data: [u8; PAGE_SIZE],
+    data: [u8; PAGE_SIZE as usize],
 }
 
 impl Page {
+    /// Create a new Page with all data initialized to 0.
     pub fn new() -> Self {
         Page {
-            data: [0; PAGE_SIZE],
+            data: [0; PAGE_SIZE as usize],
         }
+    }
+
+    pub fn raw(&self) -> [u8; PAGE_SIZE as usize] {
+        return self.data;
     }
 
     /// Write data to a page at the provided offset and return the number of bytes written.    
@@ -91,14 +97,26 @@ impl Page {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct BlockId {
     file_id: String,
-    num: usize,
+    num: u64,
+}
+
+impl fmt::Display for BlockId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "['{}'@{}]", self.file_id, self.num)
+    }
 }
 
 impl BlockId {
-    pub fn new(file_id: &str, n: usize) -> Self {
+    /// Create a new BlockId
+    ///
+    /// # Arguments
+    ///
+    /// * `file_id` - The file name where the block will be stored
+    /// * `num` - The index in the file where the block lives
+    pub fn new(file_id: &str, num: u64) -> Self {
         BlockId {
             file_id: file_id.to_string(),
-            num: n,
+            num,
         }
     }
 
@@ -106,7 +124,7 @@ impl BlockId {
         &self.file_id
     }
 
-    pub fn num(&self) -> usize {
+    pub fn num(&self) -> u64 {
         self.num
     }
 
@@ -176,30 +194,45 @@ impl FileManager {
 
     pub fn get_block(&self, bid: &BlockId, page: &mut Page) -> Result<(), Error> {
         let seek_position = Self::get_file_position(bid);
-        let file;
+        let file = self.get_or_create_file(&bid.file_id);
 
-        {
-            let files = self.files.read().unwrap();
-            file = files.get(&bid.file_id).expect("file not found").clone();
-        }
+        //{
+        //    let files = self.files.read().unwrap();
+        //    file = files
+        //        .get(&bid.file_id)
+        //        .expect(&format!("file '{}' not found", bid.file_id))
+        //        .clone();
+        //}
 
         // TODO: more research on what to do with poison errors
         let mut file = file.lock().unwrap();
 
-        assert!(seek_position + page.data.len() as u64 <= file.metadata()?.len());
+        //assert!(seek_position + page.data.len() as u64 <= file.metadata()?.len());
+        if seek_position + page.data.len() as u64 <= file.metadata()?.len() {
+            file.seek(SeekFrom::Start(seek_position))?;
+            file.read_exact(&mut page.data)?;
+        }
 
-        file.seek(SeekFrom::Start(seek_position))?;
-        file.read_exact(&mut page.data)?;
+        //println!("{:?}", page.data);
 
         Ok(())
     }
 
-    pub fn write_block(&self, bid: &BlockId, page: &Page) -> Result<(), Error> {
-        let seek_position = Self::get_file_position(bid);
+    /// Write data in the provided page to a block.
+    ///
+    /// # Arguments
+    ///
+    /// * `blk` - The BlockId that identifies where the page should be written.
+    /// * `page` - The page that will be written.
+    pub fn write_block(&self, blk: &BlockId, page: &Page) -> Result<(), Error> {
+        let seek_position = Self::get_file_position(blk);
         let file;
         {
             let files = self.files.read().unwrap();
-            file = files.get(&bid.file_id).expect("file not found").clone();
+            file = files
+                .get(&blk.file_id)
+                .expect(&format!("file '{}' not found", blk.file_id))
+                .clone();
         }
 
         let mut file = file.lock().unwrap();
@@ -207,6 +240,7 @@ impl FileManager {
         assert!(seek_position + page.data.len() as u64 <= file.metadata()?.len());
 
         file.seek(SeekFrom::Start(seek_position))?;
+        //println!("Writing data: {:?}", page.data);
         file.write_all(&page.data)?;
         file.flush()?;
         file.sync_data()?;
@@ -215,36 +249,12 @@ impl FileManager {
     }
 
     // TODO: proper error handling
+    /// Append the provided page to the file identified by the file_id
     pub fn append_block(&self, file_id: &str, page: &Page) -> Result<BlockId, Error> {
-        let file;
-
-        {
-            let mut files = self.files.write().unwrap();
-            file = files
-                .entry(file_id.to_string())
-                .or_insert_with_key(|f| {
-                    let file_path = self.get_block_file(f);
-
-                    // TODO: error handling inside closure
-                    let mut file = OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .create(true)
-                        .open(file_path)
-                        .unwrap();
-
-                    // Write the header to the file
-                    let buf: [u8; HEADER_SIZE] = [0; HEADER_SIZE];
-                    file.write_all(&buf).unwrap();
-
-                    Arc::new(Mutex::new(file))
-                })
-                .clone();
-        }
-
+        let file = self.get_or_create_file(file_id);
         let mut file = file.lock().unwrap();
         let block_start = file.seek(SeekFrom::End(0))?;
-        let block_number = (block_start as usize - HEADER_SIZE) / PAGE_SIZE;
+        let block_number = (block_start - HEADER_SIZE) / PAGE_SIZE;
         file.write_all(&page.data)?;
         file.sync_all()?;
 
@@ -254,7 +264,7 @@ impl FileManager {
         })
     }
 
-    pub fn num_blocks(&self, file_id: &str) -> Result<usize, Error> {
+    pub fn num_blocks(&self, file_id: &str) -> Result<u64, Error> {
         let file = {
             let files = self.files.read().unwrap();
             match files.get(file_id) {
@@ -268,8 +278,32 @@ impl FileManager {
 
         let mut file = file.lock().unwrap();
 
-        let file_size = file.metadata().unwrap().len() as usize;
+        let file_size = file.metadata().unwrap().len();
         Ok((file_size - 1) / PAGE_SIZE)
+    }
+
+    fn get_or_create_file(&self, file_id: &str) -> Arc<Mutex<File>> {
+        let mut files = self.files.write().unwrap();
+        files
+            .entry(file_id.to_string())
+            .or_insert_with_key(|f| {
+                let file_path = self.get_block_file(f);
+
+                // TODO: error handling
+                let mut file = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .open(file_path)
+                    .unwrap();
+
+                // Add a header to the file for storing metadata
+                let buf = [0; HEADER_SIZE as usize];
+                file.write_all(&buf).unwrap();
+
+                Arc::new(Mutex::new(file))
+            })
+            .clone()
     }
 }
 
@@ -327,17 +361,17 @@ mod tests {
             assert_eq!(file_mgr.num_blocks(&file_name).unwrap(), 0);
             for b in 0..3u8 {
                 let mut page = Page::new();
-                page.data = [b; PAGE_SIZE];
+                page.data = [b; PAGE_SIZE as usize];
 
                 // Append a new block
                 let block_id = file_mgr.append_block(&file_name, &page).unwrap();
                 file_mgr.get_block(&block_id, &mut page).unwrap();
-                assert_eq!(block_id.num, b as usize);
+                assert_eq!(block_id.num, b as u64);
                 assert_eq!(block_id.file_id, file_name);
-                assert_eq!(page.data, [b; PAGE_SIZE]);
+                assert_eq!(page.data, [b; PAGE_SIZE as usize]);
 
                 // Write over the appended block
-                page.data = [b + 100; PAGE_SIZE];
+                page.data = [b + 100; PAGE_SIZE as usize];
                 file_mgr.write_block(&block_id, &page).unwrap();
 
                 // Read the re-written block into a new page
@@ -349,4 +383,15 @@ mod tests {
             assert_eq!(3, file_mgr.num_blocks(&file_name).unwrap());
         }
     }
+
+    //#[test]
+    //fn test_create_out_of_order_blocks() {
+    //    let (_temp_dir, file_mgr) = setup();
+
+    //    let mut page = Page::new();
+
+    //    let _ = file_mgr.get_block(&BlockId::new("file", 4), &mut page);
+    //    page.write(42, 32);
+    //    let _ = file_mgr.write_block(&BlockId::new("file", 4), &page);
+    //}
 }

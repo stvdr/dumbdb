@@ -1,3 +1,4 @@
+mod buffer;
 mod buffer_manager;
 mod eviction_policy;
 mod file_manager;
