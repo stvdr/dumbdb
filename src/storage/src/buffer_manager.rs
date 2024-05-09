@@ -247,8 +247,6 @@ mod tests {
 
     #[test]
     fn test_parallel_pins() {
-        env_logger::init();
-
         let td = tempdir().unwrap();
         let data_dir = td.path().join("data");
         fs::create_dir_all(&data_dir).expect("Failed to create root directory");
@@ -293,8 +291,6 @@ mod tests {
         for handle in handles {
             handle.join().unwrap();
         }
-
-        log::trace!("COMPLETED ADDING DATA");
 
         let mut bm_lock = bm.lock().unwrap();
         for p in 0..num_threads * num_pages_per_thread {
