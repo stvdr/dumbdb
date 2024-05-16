@@ -1,5 +1,8 @@
 use byteorder::{ByteOrder, LittleEndian};
 use core::fmt;
+use log::warn;
+//use serde::de::Error;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, Read, Seek, SeekFrom, Write};
@@ -7,7 +10,7 @@ use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
-pub const PAGE_SIZE: u64 = 128;
+pub const PAGE_SIZE: u64 = 4096;
 const HEADER_SIZE: u64 = PAGE_SIZE;
 
 pub trait WriteTypeToPage {
@@ -36,6 +39,39 @@ macro_rules! impl_endian_io_traits {
             }
         }
     };
+}
+
+impl WriteTypeToPage for &str {
+    fn write(&self, page: &mut Page, offset: usize) -> usize {
+        let bytes = self.as_bytes();
+        let len = bytes.len() as u32;
+        assert!((offset + size_of::<u32>() + len as usize) <= PAGE_SIZE as usize);
+
+        page.data[offset..offset + size_of::<u32>()].copy_from_slice(&len.to_be_bytes());
+        page.data[offset + size_of::<u32>()..offset + size_of::<u32>() + len as usize]
+            .copy_from_slice(bytes);
+        size_of::<u32>() + len as usize
+    }
+}
+
+impl ReadTypeFromPage<'_> for String {
+    fn read(page: &Page, offset: usize) -> String {
+        // Read the bytes that indicate the length of the string
+        let len_bytes = &page.data[offset..offset + size_of::<u32>()];
+
+        // Convert the length into a primitive
+        let len = u32::from_be_bytes(len_bytes.try_into().unwrap()) as usize;
+
+        if len == 0 {
+            return String::new();
+        }
+
+        // Read the bytes that define the string
+        let str_bytes = &page.data[offset + size_of::<u32>()..offset + size_of::<u32>() + len];
+
+        // TODO: error checking
+        String::from_utf8(str_bytes.to_vec()).expect("unable to create string from bytes")
+    }
 }
 
 impl_endian_io_traits!(u16, write_u16, read_u16);
@@ -94,7 +130,7 @@ impl Page {
 }
 
 // BlockId points to a block's location on disk.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockId {
     file_id: String,
     num: u64,
@@ -144,6 +180,15 @@ impl BlockId {
             num: self.num + 1,
         }
     }
+
+    //pub fn serialize(&self) -> Result<Vec<u8>, Box<bincode::ErrorKind>> {
+    //    // TODO: error handling
+    //    bincode::serialize(self)
+    //}
+
+    //pub fn deserialize(bytes: &[u8]) -> Result<BlockId, Box<bincode::ErrorKind>> {
+    //    bincode::deserialize(bytes)
+    //}
 }
 
 impl Default for BlockId {
@@ -276,7 +321,7 @@ impl FileManager {
             }
         };
 
-        let mut file = file.lock().unwrap();
+        let file = file.lock().unwrap();
 
         let file_size = file.metadata().unwrap().len();
         Ok((file_size - 1) / PAGE_SIZE)
@@ -382,6 +427,18 @@ mod tests {
 
             assert_eq!(3, file_mgr.num_blocks(&file_name).unwrap());
         }
+    }
+
+    #[test]
+    fn test_write_string_to_page() {
+        let mut page = Page::new();
+        let next_offset = page.write("This is a test string", 0);
+        page.write("This is another test string", next_offset);
+        let str1 = page.read::<String>(0);
+        let str2 = page.read::<String>(next_offset);
+
+        assert_eq!(str1, "This is a test string");
+        assert_eq!(str2, "This is another test string");
     }
 
     //#[test]

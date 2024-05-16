@@ -80,12 +80,12 @@ impl LogManager {
             .num();
     }
 
-    /// Append a record to the log
+    /// Append a record to the log and return the latest lsn.
     ///
     /// # Arguments
     ///
     /// * `record` - Bytes that will be written to the log
-    pub fn append(&mut self, record: &[u8]) {
+    pub fn append(&mut self, record: &[u8]) -> i64 {
         // If the record will fit in the existing page, place it there and update the frontier
         // Otherwise, create a new block
         let len = record.len() as u64;
@@ -106,6 +106,7 @@ impl LogManager {
         frontier += self.page.write(len as RecordLength, frontier as usize) as u32;
         self.page.set_frontier(frontier as RecordLength);
         self.latest_lsn += 1;
+        self.latest_lsn
     }
 
     /// Flushes all log records to durable storage.

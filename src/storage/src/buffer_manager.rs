@@ -1,6 +1,6 @@
 use crate::{
     buffer::Buffer,
-    eviction_policy::EvictionPolicy,
+    eviction_policy::{EvictionPolicy, SimpleEvictionPolicy},
     file_manager::{BlockId, FileManager, Page},
     log_manager::LogManager,
 };
@@ -8,7 +8,7 @@ use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuar
 
 use std::collections::HashMap;
 
-struct BufferManager<E: EvictionPolicy> {
+pub struct BufferManager<E: EvictionPolicy = SimpleEvictionPolicy> {
     unused: Vec<usize>,
     blk_to_buf: HashMap<BlockId, usize>,
     buffers: Vec<Arc<RwLock<Buffer>>>,
@@ -16,8 +16,8 @@ struct BufferManager<E: EvictionPolicy> {
     eviction_policy: E,
 }
 
-unsafe impl<E: EvictionPolicy> Sync for BufferManager<E> {}
-unsafe impl<E: EvictionPolicy> Send for BufferManager<E> {}
+//unsafe impl<E: EvictionPolicy> Sync for BufferManager<E> {}
+//unsafe impl<E: EvictionPolicy> Send for BufferManager<E> {}
 
 impl<E: EvictionPolicy> BufferManager<E> {
     /// Creates a new BufferManager.
@@ -147,7 +147,7 @@ impl<E: EvictionPolicy> BufferManager<E> {
     /// # Arguments
     ///
     /// * `buffer` - The buffer to unpin.
-    pub fn unpin(&mut self, buffer: Arc<RwLock<Buffer>>) {
+    pub fn unpin(&mut self, buffer: &Arc<RwLock<Buffer>>) {
         let mut buffer = buffer.write().unwrap();
         self.unpin_locked(&mut buffer);
     }
@@ -232,16 +232,16 @@ mod tests {
         let buf3_2 = bm.pin(&BlockId::new("test", 2));
         assert_eq!(bm.num_available(), 0);
 
-        bm.unpin(buf1);
+        bm.unpin(&buf1);
         assert_eq!(bm.num_available(), 1);
 
-        bm.unpin(buf2);
+        bm.unpin(&buf2);
         assert_eq!(bm.num_available(), 2);
 
-        bm.unpin(buf3);
+        bm.unpin(&buf3);
         assert_eq!(bm.num_available(), 2);
 
-        bm.unpin(buf3_2);
+        bm.unpin(&buf3_2);
         assert_eq!(bm.num_available(), 3);
     }
 
