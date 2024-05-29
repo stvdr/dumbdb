@@ -181,6 +181,7 @@ impl Transaction {
     /// * `ok_to_log` - A boolean indicating whether the change should be logged.
     pub fn set_string(&mut self, blk: &BlockId, offset: usize, val: &str, ok_to_log: bool) {
         self.concurrency_mgr.xlock(blk);
+
         let buf = self.buffer_list.lock().unwrap().get_buffer(blk);
         let mut buf = buf.write().unwrap();
 
@@ -228,6 +229,13 @@ impl Transaction {
         val
     }
 
+    pub fn get_string(&mut self, blk: &BlockId, offset: usize) -> String {
+        self.concurrency_mgr.slock(blk);
+        let buff = self.buffer_list.lock().unwrap().get_buffer(blk);
+        let val = buff.read().unwrap().page.read(offset);
+        val
+    }
+
     /// Logs (for recovery) the setting of an integer value in a buffer.
     ///
     /// # Arguments
@@ -263,8 +271,7 @@ impl Transaction {
     /// * `new_val` - The new value being written.
     // TODO: why is `new_val` provided to this method?
     fn log_set_string(&mut self, buf: &mut Buffer, offset: usize, new_val: &str) -> i64 {
-        //let mut write_lock = buf.write().unwrap();
-        let old_val: i32 = buf.page.read(offset);
+        let old_val: String = buf.page.read(offset);
 
         // TODO: error handling
         let log_record = LogRecord::SetString {
@@ -276,7 +283,7 @@ impl Transaction {
                 .clone(),
             offset: offset as u16,
             // TODO: best way to handle the string stuff?
-            val: old_val.to_string(),
+            val: old_val,
         };
         let encoded = bincode::serialize(&log_record).unwrap();
         self.log_mgr.lock().unwrap().append(&encoded)

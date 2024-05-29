@@ -50,6 +50,17 @@ impl RecordPage {
         self.tx.lock().unwrap().get_int(&self.blk, pos)
     }
 
+    pub fn get_string(&self, slot: i16, field_name: &str) -> String {
+        assert!(
+            self.get_flag(slot) == USED,
+            "the specified slot {} is not marked USED",
+            slot
+        );
+
+        let pos = self.offset(slot) + self.layout.offset(field_name) as usize;
+        self.tx.lock().unwrap().get_string(&self.blk, pos)
+    }
+
     /// Set an integer field in a slot.
     ///
     /// # Arguments
@@ -66,6 +77,27 @@ impl RecordPage {
 
         let pos = self.offset(slot) + self.layout.offset(field_name) as usize;
         self.tx.lock().unwrap().set_int(&self.blk, pos, val, true);
+    }
+
+    /// Set string field in a slot.
+    ///
+    /// # Arguments
+    ///
+    /// * `slot` - The slot where the field will be set.
+    /// * `field_name` - The name of the field to set.
+    /// * `val` - The string value.
+    pub fn set_string(&mut self, slot: i16, field_name: &str, val: &str) {
+        assert!(
+            self.get_flag(slot) == USED,
+            "the specified slot {} is not marked USED",
+            slot
+        );
+
+        let pos = self.offset(slot) + self.layout.offset(field_name) as usize;
+        self.tx
+            .lock()
+            .unwrap()
+            .set_string(&self.blk, pos, val, true);
     }
 
     /// Mark the specified slot as empty.
@@ -97,7 +129,11 @@ impl RecordPage {
                         .lock()
                         .unwrap()
                         .set_int(&self.blk, field_pos, 0, false),
-                    //1= > self.tx.lock().unwrap().set_string(&self.blk, field_pos, "", false);
+                    Some(1) => self
+                        .tx
+                        .lock()
+                        .unwrap()
+                        .set_string(&self.blk, field_pos, "", false),
                     _ => panic!("Unsupported schema field type"),
                 }
             }
@@ -221,7 +257,7 @@ mod tests {
 
         let mut schema = Schema::new();
         schema.add_int_field("A");
-        schema.add_int_field("B");
+        schema.add_string_field("B", 10);
         let layout = Layout::from_schema(schema);
         RecordPage::new(t.clone(), blk, layout)
     }
@@ -237,8 +273,11 @@ mod tests {
             rp.set_int(slot, "A", 10 + slot as i32);
             assert_eq!(rp.get_int(slot, "A"), 10 + slot as i32);
 
-            rp.set_int(slot, "B", 20 + slot as i32);
-            assert_eq!(rp.get_int(slot, "B"), 20 + slot as i32);
+            rp.set_string(slot, "B", &format!("str {}", 20 + slot as i32));
+            assert_eq!(
+                rp.get_string(slot, "B"),
+                format!("str {}", 20 + slot as i32)
+            );
         }
 
         for i in 0..4 {
@@ -261,8 +300,11 @@ mod tests {
             rp.set_int(slot, "A", 10 + slot as i32);
             assert_eq!(rp.get_int(slot, "A"), 10 + slot as i32);
 
-            rp.set_int(slot, "B", 20 + slot as i32);
-            assert_eq!(rp.get_int(slot, "B"), 20 + slot as i32);
+            rp.set_string(slot, "B", &format!("str {}", 20 + slot as i32));
+            assert_eq!(
+                rp.get_string(slot, "B"),
+                format!("str {}", 20 + slot as i32)
+            );
         }
 
         // delete middle slot
@@ -272,10 +314,10 @@ mod tests {
         assert_eq!(rp.insert_after(-1), 1);
 
         // verify setting data at the slot
-        rp.set_int(1, "A", 32);
-        rp.set_int(1, "B", 42);
-        assert_eq!(rp.get_int(1, "A"), 32);
-        assert_eq!(rp.get_int(1, "B"), 42);
+        rp.set_int(1, "A", 42);
+        rp.set_string(1, "B", "new str");
+        assert_eq!(rp.get_int(1, "A"), 42);
+        assert_eq!(rp.get_string(1, "B"), "new str");
     }
 
     #[test]
@@ -290,8 +332,11 @@ mod tests {
             rp.set_int(slot, "A", 10 + slot as i32);
             assert_eq!(rp.get_int(slot, "A"), 10 + slot as i32);
 
-            rp.set_int(slot, "B", 20 + slot as i32);
-            assert_eq!(rp.get_int(slot, "B"), 20 + slot as i32);
+            rp.set_string(slot, "B", &format!("str {}", 20 + slot as i32));
+            assert_eq!(
+                rp.get_string(slot, "B"),
+                format!("str {}", 20 + slot as i32)
+            );
         }
 
         rp.format();

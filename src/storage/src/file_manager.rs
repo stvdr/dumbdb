@@ -41,13 +41,18 @@ macro_rules! impl_endian_io_traits {
 
 impl WriteTypeToPage for &str {
     fn write(&self, page: &mut Page, offset: usize) -> usize {
+        assert!(self.is_ascii(), "strings must be ASCII");
+
         let bytes = self.as_bytes();
         let len = bytes.len() as u32;
         assert!((offset + size_of::<u32>() + len as usize) <= PAGE_SIZE as usize);
 
         page.data[offset..offset + size_of::<u32>()].copy_from_slice(&len.to_be_bytes());
-        page.data[offset + size_of::<u32>()..offset + size_of::<u32>() + len as usize]
-            .copy_from_slice(bytes);
+
+        if len > 0 {
+            page.data[offset + size_of::<u32>()..offset + size_of::<u32>() + len as usize]
+                .copy_from_slice(bytes);
+        }
         size_of::<u32>() + len as usize
     }
 }
@@ -256,8 +261,6 @@ impl FileManager {
             file.read_exact(&mut page.data)?;
         }
 
-        //println!("{:?}", page.data);
-
         Ok(())
     }
 
@@ -283,7 +286,6 @@ impl FileManager {
         assert!(seek_position + page.data.len() as u64 <= file.metadata()?.len());
 
         file.seek(SeekFrom::Start(seek_position))?;
-        //println!("Writing data: {:?}", page.data);
         file.write_all(&page.data)?;
         file.flush()?;
         file.sync_data()?;
@@ -431,13 +433,23 @@ mod tests {
     #[test]
     fn test_write_string_to_page() {
         let mut page = Page::new();
-        let next_offset = page.write("This is a test string", 0);
-        page.write("This is another test string", next_offset);
-        let str1 = page.read::<String>(0);
-        let str2 = page.read::<String>(next_offset);
+        let off0 = page.write("first test string", 0);
+        assert_eq!(page.read::<String>(0), "first test string");
 
-        assert_eq!(str1, "This is a test string");
-        assert_eq!(str2, "This is another test string");
+        let off1 = off0 + page.write("", off0);
+        let off2 = off1 + page.write("this is a test string", off1);
+        let off3 = off2 + page.write("", off2);
+        let off4 = off3 + page.write("", off3);
+        let off5 = off4 + page.write("this is another test string", off4);
+        page.write("", off5);
+
+        assert_eq!(page.read::<String>(0), "first test string");
+        assert_eq!(page.read::<String>(off0), "");
+        assert_eq!(page.read::<String>(off1), "this is a test string");
+        assert_eq!(page.read::<String>(off2), "");
+        assert_eq!(page.read::<String>(off3), "");
+        assert_eq!(page.read::<String>(off4), "this is another test string");
+        assert_eq!(page.read::<String>(off5), "");
     }
 
     //#[test]

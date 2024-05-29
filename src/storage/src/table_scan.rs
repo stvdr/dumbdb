@@ -64,6 +64,10 @@ impl TableScan {
         self.record_page.get_int(self.current_slot, field_name)
     }
 
+    pub fn get_string(&self, field_name: &str) -> String {
+        self.record_page.get_string(self.current_slot, field_name)
+    }
+
     // TODO
     //pub fn get_val() -> Constant {}
     //
@@ -76,11 +80,15 @@ impl TableScan {
         self.record_page.set_int(self.current_slot, field_name, val);
     }
 
+    pub fn set_string(&mut self, field_name: &str, val: &str) {
+        self.record_page
+            .set_string(self.current_slot, field_name, val);
+    }
+
     // TODO
     //pub fn set_val(&mut self, field_name: &str, val: Constant) { }
     //
 
-    // TODO: this isn't correct because we don't start with an empty block at the moment
     pub fn insert(&mut self) {
         self.current_slot = self.record_page.insert_after(self.current_slot);
 
@@ -189,22 +197,24 @@ mod tests {
 
         let mut schema = Schema::new();
         schema.add_int_field("A");
-        schema.add_int_field("B");
+        schema.add_string_field("B", 10);
         let layout = Layout::from_schema(schema);
+
         let mut scan = TableScan::new(t.clone(), layout, "T");
         scan.before_first();
         for i in 0..50 {
             scan.insert();
             scan.set_int("A", i);
-            scan.set_int("B", 49 - i);
+            scan.set_string("B", &format!("string {}", 49 - i));
         }
 
         let mut count = 0;
         scan.before_first();
         while scan.next() {
             let a = scan.get_int("A");
-            let b = scan.get_int("B");
-            if a < 10 && b >= 40 {
+            let _b = scan.get_string("B");
+
+            if a < 10 {
                 count += 1;
                 scan.delete();
             }
@@ -217,9 +227,9 @@ mod tests {
         let mut i = 10;
         while scan.next() {
             let a = scan.get_int("A");
-            let b = scan.get_int("B");
+            let b = scan.get_string("B");
             assert_eq!(i, a);
-            assert_eq!(49 - i, b);
+            assert_eq!(format!("string {}", 49 - i), b);
             count += 1;
             i += 1;
         }
