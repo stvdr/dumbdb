@@ -195,6 +195,7 @@ impl Transaction {
         buf.set_modified(self.tx_num, lsn);
     }
 
+    /// Get the number of blocks in a file. A shared lock will be acquired on the file.
     pub fn size(&mut self, file_id: &str) -> u64 {
         // Take a shared lock on the dummy block
         self.concurrency_mgr
@@ -204,6 +205,11 @@ impl Transaction {
         self.file_mgr.length(file_id).unwrap()
     }
 
+    /// Append a new block to a file.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_id` - The id of the file that will have a block appended.
     pub fn append(&mut self, file_id: &str) -> BlockId {
         log::trace!("xlocking the dummy block for file '{}'", file_id);
 
@@ -215,13 +221,12 @@ impl Transaction {
         self.file_mgr.append_block(file_id, &Page::new()).unwrap()
     }
 
-    //pub fn get<T: ReadTypeFromPage>(&mut self, blk: &BlockId, offset: usize) -> T {
-    //    self.concurrency_mgr.slock(blk);
-    //    let buff = self.buffer_list.lock().unwrap().get_buffer(blk);
-    //    buff.read().unwrap().page.read(offset)
-    //}
-    //
-
+    /// Get an integer from the specified block.
+    ///
+    /// # Arguments
+    ///
+    /// * `blk` - The `BlockId` where the integer will be read from.
+    /// * `offset` - The offset in the block that the integer will be read from.
     pub fn get_int(&mut self, blk: &BlockId, offset: usize) -> i32 {
         self.concurrency_mgr.slock(blk);
         let buff = self.buffer_list.lock().unwrap().get_buffer(blk);
@@ -229,6 +234,12 @@ impl Transaction {
         val
     }
 
+    /// Get a string from the specified block.
+    ///
+    /// # Arguments
+    ///
+    /// * `blk` - The `BlockId` where the string will be read from.
+    /// * `offset` - The offset in the block that the string will be read from.
     pub fn get_string(&mut self, blk: &BlockId, offset: usize) -> String {
         self.concurrency_mgr.slock(blk);
         let buff = self.buffer_list.lock().unwrap().get_buffer(blk);
