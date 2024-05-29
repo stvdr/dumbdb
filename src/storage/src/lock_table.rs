@@ -3,6 +3,8 @@ use std::{
     sync::{Arc, Condvar, Mutex},
 };
 
+use backtrace::Backtrace;
+
 use crate::file_manager::BlockId;
 
 static MAX_TIME_MS: u32 = 10000;
@@ -28,7 +30,7 @@ impl Lock {
     }
 }
 
-struct LockTable {
+pub struct LockTable {
     locks: Arc<Mutex<HashMap<BlockId, Arc<Lock>>>>,
 }
 
@@ -48,12 +50,16 @@ impl LockTable {
     ///
     /// * `blk` - The BlockId that the shared lock will be held on.
     pub fn slock(&self, blk: &BlockId) {
+        log::trace!("requesting an slock");
+        //let backtrace = Backtrace::new();
+        //log::trace!("{backtrace:?}");
+
         let lock = {
             let mut locks = self.locks.lock().unwrap();
             if let Some(lock) = locks.get(blk).cloned() {
                 lock
             } else {
-                log::trace!("Adding new shared lock.");
+                log::trace!("adding new shared lock");
                 locks.insert(blk.clone(), Arc::new(Lock::new_shared()));
                 return;
             }
@@ -62,11 +68,11 @@ impl LockTable {
         {
             let mut count = lock.count.lock().unwrap();
             while *count == -1 {
-                log::trace!("Waiting for slock. xlock already exists");
+                log::trace!("waiting for slock. xlock already exists");
                 count = lock.condvar.wait(count).unwrap();
             }
 
-            log::trace!("Successfully added slock");
+            log::trace!("successfully retrieved slock");
             *count += 1;
         }
     }
@@ -77,15 +83,14 @@ impl LockTable {
     ///
     /// * `blk` - The BlockId that the exclusive lock will be held on.
     pub fn xlock(&self, blk: &BlockId) {
-        // if the lock doesn't exist, add one now and set the value to -1
-        // if lock does exist, wait on the condvar
+        log::trace!("requesting an xlock");
 
         let lock = {
             let mut locks = self.locks.lock().unwrap();
             if let Some(lock) = locks.get(blk).cloned() {
                 lock
             } else {
-                log::trace!("Inserting new xlock");
+                log::trace!("inserting new xlock");
                 locks.insert(blk.clone(), Arc::new(Lock::new_exclusive()));
                 return;
             }
@@ -93,13 +98,13 @@ impl LockTable {
 
         {
             let mut count = lock.count.lock().unwrap();
-            while *count != 0 {
-                log::trace!("Waiting for xlock. Lock count != 0");
+            while *count > 1 {
+                log::trace!("waiting for xlock. Lock count > 1");
                 // TODO: wait_timeout
                 count = lock.condvar.wait(count).unwrap();
             }
 
-            log::trace!("Successfully set xlock");
+            log::trace!("successfully set xlock");
             *count = -1;
         }
 
@@ -133,8 +138,8 @@ impl LockTable {
             *count -= 1;
         }
 
-        // If no shared or exclusive lock is held, notify waiting threads
-        if *count == 0 {
+        // If no locks are held, or a single shared lock (can be upgraded to an xlock) is held, notify waiting threads
+        if *count == 0 || *count == 1 {
             lock.condvar.notify_one();
         }
     }
@@ -156,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_threaded_locks() {
-        //let _ = env_logger::try_init();
+        let _ = env_logger::try_init();
         let lock_table = Arc::new(LockTable::new());
 
         let start_barrier = Arc::new(Barrier::new(3));
@@ -170,6 +175,7 @@ mod tests {
         let handle_x = thread::spawn(move || {
             start_barrier_x.wait();
             for _ in 0..500 {
+                lock_table_x.slock(&BlockId::new("test", 1));
                 lock_table_x.xlock(&BlockId::new("test", 1));
                 xlock_counter_x.fetch_add(1, Ordering::SeqCst);
                 lock_table_x.unlock(&BlockId::new("test", 1));

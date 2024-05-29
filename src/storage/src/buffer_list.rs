@@ -3,12 +3,10 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use crate::{
-    buffer::Buffer, buffer_manager::BufferManager, eviction_policy::EvictionPolicy,
-    file_manager::BlockId,
-};
+use crate::{buffer::Buffer, buffer_manager::BufferManager, file_manager::BlockId};
 
-struct BufferList {
+/// A mapping of Blocks to the buffers that are loaded into them.
+pub struct BufferList {
     buffers: HashMap<BlockId, Arc<RwLock<Buffer>>>,
     pins: Vec<BlockId>,
     buf_mgr: Arc<Mutex<BufferManager>>,
@@ -23,14 +21,18 @@ impl BufferList {
         }
     }
 
+    /// Get the buffer associated with the specified BlockId.
     pub fn get_buffer(&self, blk: &BlockId) -> Arc<RwLock<Buffer>> {
         // TODO: error handling, can ultimately use `cloned` here?
-        let buf = self.buffers.get(blk).unwrap();
+        let buf = self
+            .buffers
+            .get(blk)
+            .expect(&format!("Attempt to operate on unpinned block: {}", blk));
         buf.clone()
     }
 
+    /// Pin the specified block.
     pub fn pin(&mut self, blk: &BlockId) {
-        //let buf = self.buf_mgr.
         let buf: Arc<RwLock<Buffer>>;
         {
             // TODO: error handling
@@ -41,6 +43,7 @@ impl BufferList {
         self.pins.push(blk.clone());
     }
 
+    /// Unpin the specified block.
     pub fn unpin(&mut self, blk: &BlockId) {
         // TODO: error handling
         let buf = self.buffers.get(blk).unwrap();
@@ -49,6 +52,7 @@ impl BufferList {
             buf_mgr.unpin(&buf);
         }
 
+        // TODO: do this in constant time
         if let Some(pos) = self.pins.iter().position(|b| b == blk) {
             self.pins.swap_remove(pos);
         }
@@ -58,6 +62,7 @@ impl BufferList {
         }
     }
 
+    /// Unpin all blocks in this BufferList.
     pub fn unpin_all(&mut self) {
         for blk in self.pins.iter() {
             // TODO: error handling

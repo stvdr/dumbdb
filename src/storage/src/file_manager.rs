@@ -1,7 +1,5 @@
 use byteorder::{ByteOrder, LittleEndian};
 use core::fmt;
-use log::warn;
-//use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -138,7 +136,7 @@ pub struct BlockId {
 
 impl fmt::Display for BlockId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "['{}'@{}]", self.file_id, self.num)
+        write!(f, "[{}/{}]", self.file_id, self.num)
     }
 }
 
@@ -309,7 +307,8 @@ impl FileManager {
         })
     }
 
-    pub fn num_blocks(&self, file_id: &str) -> Result<u64, Error> {
+    /// Get the number of blocks in a file.
+    pub fn length(&self, file_id: &str) -> Result<u64, Error> {
         let file = {
             let files = self.files.read().unwrap();
             match files.get(file_id) {
@@ -403,7 +402,7 @@ mod tests {
 
         for f in 1..4 {
             let file_name = format!("file_{}", f);
-            assert_eq!(file_mgr.num_blocks(&file_name).unwrap(), 0);
+            assert_eq!(file_mgr.length(&file_name).unwrap(), 0);
             for b in 0..3u8 {
                 let mut page = Page::new();
                 page.data = [b; PAGE_SIZE as usize];
@@ -425,7 +424,7 @@ mod tests {
                 assert_eq!(page.data, new_page.data);
             }
 
-            assert_eq!(3, file_mgr.num_blocks(&file_name).unwrap());
+            assert_eq!(3, file_mgr.length(&file_name).unwrap());
         }
     }
 

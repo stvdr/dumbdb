@@ -40,7 +40,6 @@ impl Buffer {
 
     pub fn unpin(&mut self) {
         self.pin_count -= 1;
-        //assert!(self.pin_count >= 0);
     }
 
     pub fn is_pinned(&self) -> bool {

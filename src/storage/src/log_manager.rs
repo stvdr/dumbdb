@@ -43,7 +43,7 @@ impl LogManager {
     pub fn new(root_directory: &Path) -> Self {
         let file_manager = Arc::new(FileManager::new(root_directory));
 
-        let num_blocks = file_manager.num_blocks(&LOG_NAME).unwrap();
+        let num_blocks = file_manager.length(&LOG_NAME).unwrap();
 
         let mut page = Page::new();
 
