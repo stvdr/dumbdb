@@ -320,42 +320,57 @@ mod tests {
 
         let blk = fm.append_block("test", &Page::new()).unwrap();
 
-        // Verify that a committed set integer is read from a separate transaction
+        // Verify that committed sets are read from a separate transaction
         let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
         tx.set_int(&blk, 0, 10, true);
+        tx.set_string(&blk, 100, "test string", true);
         assert_eq!(tx.get_int(&blk, 0), 10);
+        assert_eq!(tx.get_string(&blk, 100), "test string");
         tx.commit();
         let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
-        let val: i32 = tx.get_int(&blk, 0);
-        assert_eq!(val, 10);
+        let int_val: i32 = tx.get_int(&blk, 0);
+        let str_val: String = tx.get_string(&blk, 100);
+        assert_eq!(int_val, 10);
+        assert_eq!(str_val, "test string");
         tx.commit();
 
-        // Verify that a set integer is read in the same transaction
+        // Verify that sets are read in the same transaction
         let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
         tx.set_int(&blk, 0, 20, true);
-        let val: i32 = tx.get_int(&blk, 0);
-        assert_eq!(val, 20);
+        tx.set_string(&blk, 100, "another test string", true);
+        let int_val: i32 = tx.get_int(&blk, 0);
+        let str_val: String = tx.get_string(&blk, 100);
+        assert_eq!(int_val, 20);
+        assert_eq!(str_val, "another test string");
         tx.rollback();
 
-        // Verify that the above set integer is not read after rollback
+        // Verify that the above data is not read after rollback
         let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
-        let val: i32 = tx.get_int(&blk, 0);
-        assert_eq!(val, 10);
+        let int_val: i32 = tx.get_int(&blk, 0);
+        let str_val: String = tx.get_string(&blk, 100);
+        assert_eq!(int_val, 10);
+        assert_eq!(str_val, "test string");
         tx.commit();
 
-        // Verify that multiple integers get rolled back
+        // Verify that multiple integers and string get rolled back
         let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
         tx.set_int(&blk, 20, 3, true);
         tx.set_int(&blk, 40, 6, true);
         tx.set_int(&blk, 60, 9, true);
+        tx.set_string(&blk, 200, "test1", true);
+        tx.set_string(&blk, 300, "test2", true);
+        tx.set_string(&blk, 400, "test3", true);
         assert_eq!(tx.get_int(&blk, 20), 3);
         assert_eq!(tx.get_int(&blk, 40), 6);
         assert_eq!(tx.get_int(&blk, 60), 9);
+        assert_eq!(tx.get_string(&blk, 200), "test1");
+        assert_eq!(tx.get_string(&blk, 300), "test2");
+        assert_eq!(tx.get_string(&blk, 400), "test3");
         tx.rollback();
 
         let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
@@ -363,6 +378,9 @@ mod tests {
         assert_eq!(tx.get_int(&blk, 20), 0);
         assert_eq!(tx.get_int(&blk, 40), 0);
         assert_eq!(tx.get_int(&blk, 60), 0);
+        assert_eq!(tx.get_string(&blk, 200), "");
+        assert_eq!(tx.get_string(&blk, 300), "");
+        assert_eq!(tx.get_string(&blk, 400), "");
         tx.rollback();
     }
 
