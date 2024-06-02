@@ -26,7 +26,7 @@ impl Schema {
         }
     }
 
-    fn add_field(&mut self, name: &str, typ: i32, length: u64) -> &mut Self {
+    pub fn add_field(&mut self, name: &str, typ: i32, length: u64) -> &mut Self {
         assert!(!self.fields.contains(&name.to_string()));
         self.fields.push(name.to_string());
         self.info

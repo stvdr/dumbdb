@@ -12,6 +12,14 @@ pub struct Layout {
 }
 
 impl Layout {
+    pub fn new(schema: Schema, offsets: HashMap<String, u64>, slot_size: u64) -> Self {
+        Self {
+            schema,
+            offsets,
+            slot_size,
+        }
+    }
+
     pub fn from_schema(schema: Schema) -> Self {
         let mut offsets = HashMap::new();
         let mut pos = LAYOUT_START;
@@ -25,11 +33,7 @@ impl Layout {
             pos += len;
         }
 
-        Self {
-            schema,
-            offsets,
-            slot_size: pos,
-        }
+        Self::new(schema, offsets, pos)
     }
 
     pub fn schema(&self) -> Schema {

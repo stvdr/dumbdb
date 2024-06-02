@@ -3,17 +3,20 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use crate::{buffer::Buffer, buffer_manager::BufferManager, file_manager::BlockId};
+use crate::{
+    buffer::Buffer, buffer_manager::BufferManager, eviction_policy::SimpleEvictionPolicy,
+    file_manager::BlockId,
+};
 
 /// A mapping of Blocks to the buffers that are loaded into them.
-pub struct BufferList {
-    buffers: HashMap<BlockId, Arc<RwLock<Buffer>>>,
+pub struct BufferList<const P: usize> {
+    buffers: HashMap<BlockId, Arc<RwLock<Buffer<P>>>>,
     pins: Vec<BlockId>,
-    buf_mgr: Arc<Mutex<BufferManager>>,
+    buf_mgr: Arc<Mutex<BufferManager<P, SimpleEvictionPolicy>>>,
 }
 
-impl BufferList {
-    pub fn new(buf_mgr: Arc<Mutex<BufferManager>>) -> Self {
+impl<const P: usize> BufferList<P> {
+    pub fn new(buf_mgr: Arc<Mutex<BufferManager<P, SimpleEvictionPolicy>>>) -> Self {
         Self {
             buffers: HashMap::new(),
             pins: Vec::new(),
@@ -22,7 +25,7 @@ impl BufferList {
     }
 
     /// Get the buffer associated with the specified BlockId.
-    pub fn get_buffer(&self, blk: &BlockId) -> Arc<RwLock<Buffer>> {
+    pub fn get_buffer(&self, blk: &BlockId) -> Arc<RwLock<Buffer<P>>> {
         // TODO: error handling, can ultimately use `cloned` here?
         let buf = self
             .buffers
@@ -33,12 +36,11 @@ impl BufferList {
 
     /// Pin the specified block.
     pub fn pin(&mut self, blk: &BlockId) {
-        let buf: Arc<RwLock<Buffer>>;
-        {
+        let buf = {
             // TODO: error handling
             let mut buf_mgr = self.buf_mgr.lock().unwrap();
-            buf = buf_mgr.pin(blk);
-        }
+            buf_mgr.pin(blk)
+        };
         self.buffers.insert(blk.clone(), buf);
         self.pins.push(blk.clone());
     }

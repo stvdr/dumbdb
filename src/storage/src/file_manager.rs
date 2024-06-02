@@ -8,21 +8,20 @@ use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
-pub const PAGE_SIZE: u64 = 4096;
-const HEADER_SIZE: u64 = PAGE_SIZE;
+const HEADER_SIZE: u64 = 1024;
 
-pub trait WriteTypeToPage {
-    fn write(&self, page: &mut Page, offset: usize) -> usize;
+pub trait WriteTypeToPage<const P: usize> {
+    fn write(&self, page: &mut Page<P>, offset: usize) -> usize;
 }
 
-pub trait ReadTypeFromPage<'a> {
-    fn read(page: &'a Page, offset: usize) -> Self;
+pub trait ReadTypeFromPage<'a, const P: usize> {
+    fn read(page: &'a Page<P>, offset: usize) -> Self;
 }
 
 macro_rules! impl_endian_io_traits {
     ($t:ty, $write_fn:ident, $read_fn:ident) => {
-        impl WriteTypeToPage for $t {
-            fn write(&self, page: &mut Page, offset: usize) -> usize {
+        impl<const P: usize> WriteTypeToPage<P> for $t {
+            fn write(&self, page: &mut Page<P>, offset: usize) -> usize {
                 let size = size_of::<Self>();
                 let end = offset + size;
                 LittleEndian::$write_fn(&mut page.data[offset..end], *self);
@@ -30,8 +29,8 @@ macro_rules! impl_endian_io_traits {
             }
         }
 
-        impl ReadTypeFromPage<'_> for $t {
-            fn read(page: &Page, offset: usize) -> Self {
+        impl<const P: usize> ReadTypeFromPage<'_, P> for $t {
+            fn read(page: &Page<P>, offset: usize) -> Self {
                 let size = size_of::<Self>();
                 LittleEndian::$read_fn(&page.data[offset..offset + size])
             }
@@ -39,13 +38,13 @@ macro_rules! impl_endian_io_traits {
     };
 }
 
-impl WriteTypeToPage for &str {
-    fn write(&self, page: &mut Page, offset: usize) -> usize {
+impl<const P: usize> WriteTypeToPage<P> for &str {
+    fn write(&self, page: &mut Page<P>, offset: usize) -> usize {
         assert!(self.is_ascii(), "strings must be ASCII");
 
         let bytes = self.as_bytes();
         let len = bytes.len() as u32;
-        assert!((offset + size_of::<u32>() + len as usize) <= PAGE_SIZE as usize);
+        assert!((offset + size_of::<u32>() + len as usize) <= P);
 
         page.data[offset..offset + size_of::<u32>()].copy_from_slice(&len.to_be_bytes());
 
@@ -57,8 +56,8 @@ impl WriteTypeToPage for &str {
     }
 }
 
-impl ReadTypeFromPage<'_> for String {
-    fn read(page: &Page, offset: usize) -> String {
+impl<const P: usize> ReadTypeFromPage<'_, P> for String {
+    fn read(page: &Page<P>, offset: usize) -> String {
         // Read the bytes that indicate the length of the string
         let len_bytes = &page.data[offset..offset + size_of::<u32>()];
 
@@ -86,19 +85,17 @@ impl_endian_io_traits!(i64, write_i64, read_i64);
 
 // Page is a block that has been pulled into a memory buffer.
 #[derive(Debug)]
-pub struct Page {
-    data: [u8; PAGE_SIZE as usize],
+pub struct Page<const P: usize> {
+    data: [u8; P],
 }
 
-impl Page {
+impl<const P: usize> Page<P> {
     /// Create a new Page with all data initialized to 0.
     pub fn new() -> Self {
-        Page {
-            data: [0; PAGE_SIZE as usize],
-        }
+        Page { data: [0; P] }
     }
 
-    pub fn raw(&self) -> [u8; PAGE_SIZE as usize] {
+    pub fn raw(&self) -> [u8; P] {
         return self.data;
     }
 
@@ -108,7 +105,7 @@ impl Page {
     ///
     /// * `data` - Data to be written to the page.
     /// * `offset` - The offset in the page where data will be written.
-    pub fn write<T: WriteTypeToPage>(&mut self, data: T, offset: usize) -> usize {
+    pub fn write<T: WriteTypeToPage<P>>(&mut self, data: T, offset: usize) -> usize {
         data.write(self, offset)
     }
 
@@ -123,7 +120,7 @@ impl Page {
         data.len()
     }
 
-    pub fn read<'a, T: ReadTypeFromPage<'a>>(&'a self, offset: usize) -> T {
+    pub fn read<'a, T: ReadTypeFromPage<'a, P>>(&'a self, offset: usize) -> T {
         T::read(self, offset)
     }
 
@@ -203,12 +200,13 @@ impl Default for BlockId {
     }
 }
 
-pub struct FileManager {
+pub struct FileManager<const P: usize> {
     files: RwLock<HashMap<String, Arc<Mutex<File>>>>,
     root_directory: PathBuf,
+    page_size: usize,
 }
 
-impl std::fmt::Debug for FileManager {
+impl<const P: usize> std::fmt::Debug for FileManager<P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FileManager")
             .field("files", &self.files)
@@ -217,7 +215,9 @@ impl std::fmt::Debug for FileManager {
     }
 }
 
-impl FileManager {
+impl<const P: usize> FileManager<P> {
+    pub type Page = Page<P>;
+
     pub fn new(root_directory: &Path) -> Self {
         if !root_directory.exists() {
             panic!(
@@ -229,18 +229,23 @@ impl FileManager {
         Self {
             files: RwLock::new(HashMap::new()),
             root_directory: root_directory.to_path_buf(),
+            page_size: P,
         }
     }
 
+    pub fn page_size(&self) -> usize {
+        self.page_size
+    }
+
     fn get_file_position(bid: &BlockId) -> u64 {
-        (bid.num * PAGE_SIZE + HEADER_SIZE) as u64
+        (bid.num * P as u64 + HEADER_SIZE) as u64
     }
 
     fn get_block_file(&self, file_id: &str) -> PathBuf {
         self.root_directory.join(file_id)
     }
 
-    pub fn get_block(&self, bid: &BlockId, page: &mut Page) -> Result<(), Error> {
+    pub fn get_block(&self, bid: &BlockId, page: &mut Self::Page) -> Result<(), Error> {
         let seek_position = Self::get_file_position(bid);
         let file = self.get_or_create_file(&bid.file_id);
 
@@ -270,7 +275,7 @@ impl FileManager {
     ///
     /// * `blk` - The BlockId that identifies where the page should be written.
     /// * `page` - The page that will be written.
-    pub fn write_block(&self, blk: &BlockId, page: &Page) -> Result<(), Error> {
+    pub fn write_block(&self, blk: &BlockId, page: &Self::Page) -> Result<(), Error> {
         let seek_position = Self::get_file_position(blk);
         let file;
         {
@@ -295,11 +300,11 @@ impl FileManager {
 
     // TODO: proper error handling
     /// Append the provided page to the file identified by the file_id
-    pub fn append_block(&self, file_id: &str, page: &Page) -> Result<BlockId, Error> {
+    pub fn append_block(&self, file_id: &str, page: &Self::Page) -> Result<BlockId, Error> {
         let file = self.get_or_create_file(file_id);
         let mut file = file.lock().unwrap();
         let block_start = file.seek(SeekFrom::End(0))?;
-        let block_number = (block_start - HEADER_SIZE) / PAGE_SIZE;
+        let block_number = (block_start - HEADER_SIZE) / P as u64;
         file.write_all(&page.data)?;
         file.sync_all()?;
 
@@ -325,7 +330,7 @@ impl FileManager {
         let file = file.lock().unwrap();
 
         let file_size = file.metadata().unwrap().len();
-        Ok((file_size - 1) / PAGE_SIZE)
+        Ok((file_size - 1) / P as u64)
     }
 
     fn get_or_create_file(&self, file_id: &str) -> Arc<Mutex<File>> {
@@ -359,7 +364,7 @@ mod tests {
     use std::fs;
     use tempfile::{tempdir, TempDir};
 
-    fn setup() -> (TempDir, FileManager) {
+    fn setup() -> (TempDir, FileManager<4096>) {
         let temp_dir = tempdir().unwrap();
         let root_dir = temp_dir.path().join("data");
         fs::create_dir_all(&root_dir).expect("Failed to create root directory");
@@ -368,7 +373,7 @@ mod tests {
 
     #[test]
     fn test_write_primitive() {
-        let mut page = Page::new();
+        let mut page = Page::<4096>::new();
 
         let mut offset = 0;
         for i in 1..10u32 {
@@ -387,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_write_bytes() {
-        let mut page = Page::new();
+        let mut page = Page::<4096>::new();
         let bytes = [42u8; 64];
 
         let n = page.write_bytes(&bytes[..], 0);
@@ -406,22 +411,22 @@ mod tests {
             let file_name = format!("file_{}", f);
             assert_eq!(file_mgr.length(&file_name).unwrap(), 0);
             for b in 0..3u8 {
-                let mut page = Page::new();
-                page.data = [b; PAGE_SIZE as usize];
+                let mut page = Page::<4096>::new();
+                page.data = [b; 4096];
 
                 // Append a new block
                 let block_id = file_mgr.append_block(&file_name, &page).unwrap();
                 file_mgr.get_block(&block_id, &mut page).unwrap();
                 assert_eq!(block_id.num, b as u64);
                 assert_eq!(block_id.file_id, file_name);
-                assert_eq!(page.data, [b; PAGE_SIZE as usize]);
+                assert_eq!(page.data, [b; 4096]);
 
                 // Write over the appended block
-                page.data = [b + 100; PAGE_SIZE as usize];
+                page.data = [b + 100; 4096];
                 file_mgr.write_block(&block_id, &page).unwrap();
 
                 // Read the re-written block into a new page
-                let mut new_page = Page::new();
+                let mut new_page = Page::<4096>::new();
                 file_mgr.get_block(&block_id, &mut new_page).unwrap();
                 assert_eq!(page.data, new_page.data);
             }
@@ -432,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_write_string_to_page() {
-        let mut page = Page::new();
+        let mut page = Page::<4096>::new();
         let off0 = page.write("first test string", 0);
         assert_eq!(page.read::<String>(0), "first test string");
 

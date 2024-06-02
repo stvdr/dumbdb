@@ -29,7 +29,7 @@ pub enum LogRecord {
 }
 
 impl LogRecord {
-    pub fn undo(&self, tx: &mut Transaction) {
+    pub fn undo<const P: usize>(&self, tx: &mut Transaction<P>) {
         match self {
             LogRecord::SetInt {
                 tx_num,

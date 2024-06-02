@@ -7,17 +7,17 @@ use crate::{
     transaction::Transaction,
 };
 
-struct TableScan {
-    tx: Arc<Mutex<Transaction>>,
+pub struct TableScan<const P: usize> {
+    tx: Arc<Mutex<Transaction<P>>>,
     layout: Layout,
-    record_page: RecordPage,
+    record_page: RecordPage<P>,
     file_name: String,
     current_slot: i16,
     is_closed: bool,
 }
 
-impl TableScan {
-    pub fn new(tx: Arc<Mutex<Transaction>>, layout: Layout, file_name: &str) -> Self {
+impl<const P: usize> TableScan<P> {
+    pub fn new(tx: Arc<Mutex<Transaction<P>>>, layout: Layout, file_name: &str) -> Self {
         let blk = {
             let mut ltx = tx.lock().unwrap();
             if ltx.size(file_name) == 0 {
@@ -89,6 +89,9 @@ impl TableScan {
     //pub fn set_val(&mut self, field_name: &str, val: Constant) { }
     //
 
+    /// Move to the next slot available for insertion and mark it USED.
+    ///
+    /// If there is no slot available in the current `RecordPage`, creates a new `RecordPage`.
     pub fn insert(&mut self) {
         self.current_slot = self.record_page.insert_after(self.current_slot);
 
@@ -145,7 +148,7 @@ impl TableScan {
     }
 }
 
-impl Drop for TableScan {
+impl<const P: usize> Drop for TableScan<P> {
     fn drop(&mut self) {
         self.close();
     }
@@ -179,7 +182,7 @@ mod tests {
         let log_dir = td.path().join("log");
         fs::create_dir_all(&log_dir).unwrap();
 
-        let lm = Arc::new(Mutex::new(LogManager::new(&log_dir)));
+        let lm = Arc::new(Mutex::new(LogManager::<4096>::new(&log_dir)));
         let fm = Arc::new(FileManager::new(&data_dir));
         let bm = Arc::new(Mutex::new(BufferManager::new(
             10,

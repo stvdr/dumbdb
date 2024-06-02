@@ -1,24 +1,20 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{
-    file_manager::{BlockId, PAGE_SIZE},
-    layout::Layout,
-    transaction::Transaction,
-};
+use crate::{file_manager::BlockId, layout::Layout, transaction::Transaction};
 
 // TODO: slot should be a type
 
 const EMPTY: i32 = 0;
 const USED: i32 = 1;
 
-pub struct RecordPage {
-    tx: Arc<Mutex<Transaction>>,
+pub struct RecordPage<const P: usize> {
+    tx: Arc<Mutex<Transaction<P>>>,
     blk: BlockId,
     layout: Layout,
 }
 
-impl RecordPage {
-    pub fn new(tx: Arc<Mutex<Transaction>>, blk: BlockId, layout: Layout) -> Self {
+impl<const P: usize> RecordPage<P> {
+    pub fn new(tx: Arc<Mutex<Transaction<P>>>, blk: BlockId, layout: Layout) -> Self {
         tx.lock().unwrap().pin(&blk);
 
         Self {
@@ -50,6 +46,12 @@ impl RecordPage {
         self.tx.lock().unwrap().get_int(&self.blk, pos)
     }
 
+    /// Get a String value from a field.
+    ///
+    /// # Arguments
+    ///
+    /// * `slot` - The slot to take the value from.
+    /// * `field_name` - The field to read the String from.
     pub fn get_string(&self, slot: i16, field_name: &str) -> String {
         assert!(
             self.get_flag(slot) == USED,
@@ -181,7 +183,7 @@ impl RecordPage {
 
     // Returns a boolean indicating whether or not the slot fits in a record page.
     fn is_valid_slot(&self, slot: i16) -> bool {
-        self.offset(slot + 1) as u64 <= PAGE_SIZE
+        self.offset(slot + 1) as u64 <= self.tx.lock().unwrap().block_size() as u64
     }
 
     // TODO: get_string
@@ -230,7 +232,7 @@ mod tests {
 
     use super::*;
 
-    fn get_record_page() -> RecordPage {
+    fn get_record_page<const P: usize>() -> RecordPage<P> {
         let td = tempdir().unwrap();
         let data_dir = td.path().join("data");
         fs::create_dir_all(&data_dir).unwrap();
@@ -259,12 +261,12 @@ mod tests {
         schema.add_int_field("A");
         schema.add_string_field("B", 10);
         let layout = Layout::from_schema(schema);
-        RecordPage::new(t.clone(), blk, layout)
+        RecordPage::<P>::new(t.clone(), blk, layout)
     }
 
     #[test]
     fn test_insert_delete() {
-        let mut rp = get_record_page();
+        let mut rp = get_record_page::<4096>();
         let mut slot = -1;
 
         while slot < 3 {
@@ -290,7 +292,7 @@ mod tests {
 
     #[test]
     fn test_delete_and_insert_middle() {
-        let mut rp = get_record_page();
+        let mut rp = get_record_page::<4096>();
         let mut slot = -1;
 
         // insert at 0, 1, 2
@@ -322,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_format() {
-        let mut rp = get_record_page();
+        let mut rp = get_record_page::<4096>();
         let mut slot = -1;
 
         // insert at 0, 1, 2

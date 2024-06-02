@@ -8,18 +8,15 @@ use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuar
 
 use std::collections::HashMap;
 
-pub struct BufferManager<E: EvictionPolicy = SimpleEvictionPolicy> {
+pub struct BufferManager<const P: usize, E: EvictionPolicy = SimpleEvictionPolicy> {
     unused: Vec<usize>,
     blk_to_buf: HashMap<BlockId, usize>,
-    buffers: Vec<Arc<RwLock<Buffer>>>,
+    buffers: Vec<Arc<RwLock<Buffer<P>>>>,
     num_available: usize,
     eviction_policy: E,
 }
 
-//unsafe impl<E: EvictionPolicy> Sync for BufferManager<E> {}
-//unsafe impl<E: EvictionPolicy> Send for BufferManager<E> {}
-
-impl<E: EvictionPolicy> BufferManager<E> {
+impl<const P: usize, E: EvictionPolicy> BufferManager<P, E> {
     /// Creates a new BufferManager.
     ///
     /// # Arguments
@@ -32,8 +29,8 @@ impl<E: EvictionPolicy> BufferManager<E> {
     /// from the pool.
     pub fn new(
         size: usize,
-        file_manager: Arc<FileManager>,
-        log_manager: Arc<Mutex<LogManager>>,
+        file_manager: Arc<FileManager<P>>,
+        log_manager: Arc<Mutex<LogManager<P>>>,
         eviction_policy: E,
     ) -> Self {
         Self {
@@ -64,7 +61,7 @@ impl<E: EvictionPolicy> BufferManager<E> {
     }
 
     // TODO: Error Checking
-    pub fn pin(&mut self, blk: &BlockId) -> Arc<RwLock<Buffer>> {
+    pub fn pin(&mut self, blk: &BlockId) -> Arc<RwLock<Buffer<P>>> {
         let buf_index = match self.blk_to_buf.get(&blk) {
             Some(buf_index) => {
                 log::trace!(
@@ -147,7 +144,7 @@ impl<E: EvictionPolicy> BufferManager<E> {
     /// # Arguments
     ///
     /// * `buffer` - The buffer to unpin.
-    pub fn unpin(&mut self, buffer: &Arc<RwLock<Buffer>>) {
+    pub fn unpin(&mut self, buffer: &Arc<RwLock<Buffer<P>>>) {
         let mut buffer = buffer.write().unwrap();
         self.unpin_locked(&mut buffer);
     }
@@ -158,7 +155,7 @@ impl<E: EvictionPolicy> BufferManager<E> {
     /// # Arguments
     ///
     /// * `buffer` - A mutable reference to a Buffer.
-    pub fn unpin_locked(&mut self, buffer: &mut Buffer) {
+    pub fn unpin_locked(&mut self, buffer: &mut Buffer<P>) {
         buffer.unpin();
         if !buffer.is_pinned() {
             let b = buffer.blk.as_ref().unwrap();
@@ -195,7 +192,7 @@ mod tests {
 
     use crate::{
         eviction_policy::SimpleEvictionPolicy,
-        file_manager::{BlockId, FileManager, Page, PAGE_SIZE},
+        file_manager::{BlockId, FileManager, Page},
         log_manager::LogManager,
     };
 
@@ -210,7 +207,7 @@ mod tests {
         fs::create_dir_all(&log_dir).expect("Failed to create root directory");
 
         let lm = LogManager::new(&log_dir);
-        let fm = FileManager::new(&data_dir);
+        let fm = FileManager::<128>::new(&data_dir);
         let mut bm = BufferManager::new(
             3,
             Arc::new(fm),
@@ -253,7 +250,7 @@ mod tests {
         let log_dir = td.path().join("log");
         fs::create_dir_all(&log_dir).expect("Failed to create root directory");
 
-        let lm = LogManager::new(&log_dir);
+        let lm = LogManager::<4096>::new(&log_dir);
         let fm = Arc::new(FileManager::new(&data_dir));
         let bm = Arc::new(Mutex::new(BufferManager::new(
             1,
