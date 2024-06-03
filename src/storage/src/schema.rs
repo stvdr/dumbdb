@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct FieldInfo {
     typ: i32,
     length: u64,
@@ -12,7 +12,7 @@ impl FieldInfo {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Schema {
     fields: Vec<String>,
     info: HashMap<String, FieldInfo>,

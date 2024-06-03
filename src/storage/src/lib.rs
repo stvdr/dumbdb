@@ -2,6 +2,9 @@
 #![feature(generic_const_exprs)]
 #![feature(inherent_associated_types)]
 
+#[cfg(test)]
+mod tests;
+
 mod buffer;
 mod buffer_list;
 mod buffer_manager;

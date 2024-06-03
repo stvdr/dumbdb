@@ -4,7 +4,7 @@ use crate::schema::Schema;
 
 static LAYOUT_START: u64 = mem::size_of::<u32>() as u64;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Layout {
     schema: Schema,
     offsets: HashMap<String, u64>,
@@ -42,7 +42,11 @@ impl Layout {
 
     pub fn offset(&self, field_name: &str) -> u64 {
         // TODO: error handling
-        *self.offsets.get(field_name).unwrap()
+        *self.offsets.get(field_name).expect(&format!(
+            "field '{}' does not exist in {:?}",
+            field_name,
+            self.schema()
+        ))
     }
 
     pub fn slot_size(&self) -> u64 {

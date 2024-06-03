@@ -345,8 +345,11 @@ impl<const P: usize> FileManager<P> {
                     .read(true)
                     .write(true)
                     .create(true)
-                    .open(file_path)
-                    .unwrap();
+                    .open(file_path.clone())
+                    .expect(&format!(
+                        "Unable to open file path: {}",
+                        file_path.to_string_lossy()
+                    ));
 
                 // Add a header to the file for storing metadata
                 let buf = [0; HEADER_SIZE as usize];

@@ -91,7 +91,8 @@ impl<const P: usize> TableScan<P> {
 
     /// Move to the next slot available for insertion and mark it USED.
     ///
-    /// If there is no slot available in the current `RecordPage`, creates a new `RecordPage`.
+    /// If there is no slot available in the current `RecordPage`, creates a new `RecordPage` and
+    /// uses the first slot there.
     pub fn insert(&mut self) {
         self.current_slot = self.record_page.insert_after(self.current_slot);
 
