@@ -92,3 +92,55 @@ impl UpdateScan for SelectScan<'_> {
         self.scan.move_to_rid(rid);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tempfile::tempdir;
+
+    use crate::{
+        metadata::metadata_manager::MetadataManager,
+        scan::{
+            constant::Constant, expression::Expression, predicate::Predicate, scan::Scan,
+            term::Term,
+        },
+        table_scan::TableScan,
+        tests::test_utils::{create_default_tables, default_test_db},
+    };
+
+    use super::SelectScan;
+
+    #[test]
+    fn test_scan_with_predicate() {
+        let td = tempdir().unwrap();
+        let mut db = default_test_db(&td);
+        create_default_tables(&mut db);
+
+        let tx = Arc::new(Mutex::new(db.create_transaction()));
+        let metadata_manager = MetadataManager::new(&tx);
+
+        let lhs1 = Expression::FieldName("grad_year".to_string());
+        let value = Expression::Value(Constant::Integer(2021));
+        let rhs1 = value;
+        let t1 = Term::new(lhs1, rhs1);
+
+        //let lhs2 = Expression::FieldName("major_id".to_string());
+        //let rhs2 = Expression::FieldName("did".to_string());
+        //let t2 = Term::new(lhs2, rhs2);
+
+        let mut pred1 = Predicate::from_term(t1);
+
+        let table_layout = metadata_manager.get_table_layout("student", &tx).unwrap();
+        let mut table_scan = TableScan::new(tx.clone(), table_layout, "student");
+        let mut select_scan = SelectScan::new(pred1, &mut table_scan);
+
+        assert!(select_scan.next());
+        assert_eq!(select_scan.get_int("sid").unwrap(), 1);
+        assert!(select_scan.next());
+        assert_eq!(select_scan.get_int("sid").unwrap(), 7);
+        assert!(select_scan.next());
+        assert_eq!(select_scan.get_int("sid").unwrap(), 9);
+        assert!(!select_scan.next());
+    }
+}

@@ -44,14 +44,12 @@ impl FromDynamic for i32 {
 
 impl FromDynamic for &str {
     fn as_string(&self) -> Option<&str> {
-        println!("getting dynamic string {}", self);
         Some(self)
     }
 }
 
 impl FromDynamic for String {
     fn as_string(&self) -> Option<&str> {
-        println!("getting dynamic string 2 {}", self);
         Some(self)
     }
 }
