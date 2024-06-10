@@ -1,2 +1,5 @@
-pub mod table_manager;
-pub mod view_manager;
+mod index_manager;
+pub mod metadata_manager;
+mod stats_manager;
+mod table_manager;
+mod view_manager;

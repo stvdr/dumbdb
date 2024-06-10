@@ -76,3 +76,23 @@ impl Schema {
         self.fields.contains(&name.to_string())
     }
 }
+
+#[macro_export]
+macro_rules! make_schema {
+    ($( $name:expr => $typ:tt $( ($len:expr) )? ),*) => {{
+        use crate::{schema::Schema};
+        let mut schema = Schema::new();
+        $(
+            match stringify!($typ) {
+                "i32" => { schema.add_int_field($name); },
+                "varchar" => {
+                    let mut len = 255;
+                    $ ( len = $len; )?
+                    schema.add_string_field($name, len);
+                },
+                _ => panic!("Unsupported field type"),
+            }
+        )*
+        schema
+    }};
+}

@@ -1,6 +1,7 @@
 #![feature(assert_matches)]
 #![feature(generic_const_exprs)]
 #![feature(inherent_associated_types)]
+#![feature(trait_upcasting)]
 
 #[cfg(test)]
 mod tests;
@@ -22,4 +23,6 @@ mod schema;
 mod table_scan;
 mod transaction;
 
+mod index;
 mod metadata;
+mod scan;
