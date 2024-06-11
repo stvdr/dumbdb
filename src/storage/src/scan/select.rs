@@ -112,7 +112,7 @@ mod tests {
     use super::SelectScan;
 
     #[test]
-    fn test_scan_with_predicate() {
+    fn test_select_scan_with_predicate() {
         let td = tempdir().unwrap();
         let mut db = default_test_db(&td);
         create_default_tables(&mut db);
@@ -125,15 +125,11 @@ mod tests {
         let rhs1 = value;
         let t1 = Term::new(lhs1, rhs1);
 
-        //let lhs2 = Expression::FieldName("major_id".to_string());
-        //let rhs2 = Expression::FieldName("did".to_string());
-        //let t2 = Term::new(lhs2, rhs2);
-
-        let mut pred1 = Predicate::from_term(t1);
+        let mut predicate = Predicate::from_term(t1);
 
         let table_layout = metadata_manager.get_table_layout("student", &tx).unwrap();
         let mut table_scan = TableScan::new(tx.clone(), table_layout, "student");
-        let mut select_scan = SelectScan::new(pred1, &mut table_scan);
+        let mut select_scan = SelectScan::new(predicate, &mut table_scan);
 
         assert!(select_scan.next());
         assert_eq!(select_scan.get_int("sid").unwrap(), 1);

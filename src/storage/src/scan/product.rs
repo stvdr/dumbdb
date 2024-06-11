@@ -10,7 +10,9 @@ struct ProductScan<'a> {
 
 impl<'a> ProductScan<'a> {
     pub fn new(left: &'a mut dyn Scan, right: &'a mut dyn Scan) -> Self {
-        Self { left, right }
+        let mut s = Self { left, right };
+        s.before_first();
+        s
     }
 }
 
@@ -27,7 +29,7 @@ impl Scan for ProductScan<'_> {
             true
         } else {
             self.right.before_first();
-            self.left.next()
+            self.right.next() && self.left.next()
         }
     }
 
@@ -63,4 +65,56 @@ impl Scan for ProductScan<'_> {
         self.left.close();
         self.right.close();
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tempfile::tempdir;
+
+    use crate::{
+        metadata::metadata_manager::MetadataManager,
+        scan::scan::Scan,
+        table_scan::TableScan,
+        tests::test_utils::{create_default_tables, default_test_db},
+    };
+
+    use super::ProductScan;
+
+    #[test]
+    fn test_product_scan() {
+        let td = tempdir().unwrap();
+        let mut db = default_test_db(&td);
+        create_default_tables(&mut db);
+
+        let tx = Arc::new(Mutex::new(db.create_transaction()));
+        let meta_mgr = MetadataManager::new(&tx);
+
+        let mut left_scan = TableScan::new(
+            tx.clone(),
+            meta_mgr.get_table_layout("student", &tx).unwrap(),
+            "student",
+        );
+
+        let mut right_scan = TableScan::new(
+            tx.clone(),
+            meta_mgr.get_table_layout("dept", &tx).unwrap(),
+            "dept",
+        );
+
+        let mut product_scan = ProductScan::new(&mut left_scan, &mut right_scan);
+
+        for s in 1..10 {
+            for d in [10, 20, 30].iter() {
+                assert!(product_scan.next());
+                assert_eq!(product_scan.get_int("sid").unwrap(), s);
+                assert_eq!(product_scan.get_int("did").unwrap(), *d);
+            }
+        }
+
+        assert!(!product_scan.next());
+    }
+
+    // TODO: test join against empty table
 }

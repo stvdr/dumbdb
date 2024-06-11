@@ -6,13 +6,15 @@ use super::{
 };
 
 pub struct ProjectScan<'a> {
-    field_list: HashSet<String>,
+    field_list: HashSet<&'a str>,
     scan: &'a mut dyn UpdateScan,
 }
 
 impl<'a> ProjectScan<'a> {
-    pub fn new(field_list: HashSet<String>, scan: &'a mut dyn UpdateScan) -> Self {
-        Self { field_list, scan }
+    pub fn new(field_list: HashSet<&'a str>, scan: &'a mut dyn UpdateScan) -> Self {
+        let mut s = Self { field_list, scan };
+        s.before_first();
+        s
     }
 }
 
@@ -53,5 +55,53 @@ impl Scan for ProjectScan<'_> {
 
     fn close(&mut self) {
         self.scan.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::HashSet,
+        sync::{Arc, Mutex},
+    };
+
+    use tempfile::tempdir;
+
+    use crate::{
+        metadata::metadata_manager::MetadataManager,
+        scan::scan::Scan,
+        table_scan::TableScan,
+        tests::test_utils::{create_default_tables, default_test_db},
+    };
+
+    use super::ProjectScan;
+
+    #[test]
+    fn test_project_scan() {
+        let td = tempdir().unwrap();
+        let mut db = default_test_db(&td);
+        create_default_tables(&mut db);
+
+        let tx = Arc::new(Mutex::new(db.create_transaction()));
+        let meta_mgr = MetadataManager::new(&tx);
+
+        let mut scan = TableScan::new(
+            tx.clone(),
+            meta_mgr.get_table_layout("student", &tx).unwrap(),
+            "student",
+        );
+
+        let mut project_scan = ProjectScan::new(HashSet::from(["sid", "grad_year"]), &mut scan);
+
+        let mut num_students = 0;
+        while project_scan.next() {
+            assert!(project_scan.get_int("sid").is_ok());
+            assert!(project_scan.get_int("grad_year").is_ok());
+            assert!(project_scan.get_int("sname").is_err());
+            assert!(project_scan.get_int("major_id").is_err());
+            num_students += 1;
+        }
+
+        assert_eq!(num_students, 9);
     }
 }
