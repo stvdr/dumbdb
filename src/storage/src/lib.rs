@@ -2,6 +2,7 @@
 #![feature(generic_const_exprs)]
 #![feature(inherent_associated_types)]
 #![feature(trait_upcasting)]
+#![feature(let_chains)]
 
 #[cfg(test)]
 mod tests;
@@ -25,4 +26,5 @@ mod transaction;
 
 mod index;
 mod metadata;
+mod parser;
 mod scan;
