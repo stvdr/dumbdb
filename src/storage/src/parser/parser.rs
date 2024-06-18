@@ -1,4 +1,9 @@
-use super::{lexer::Lexer, token::Token};
+use std::iter::Peekable;
+
+use super::{
+    lexer::{Lexer, LexerError, LexerResult},
+    token::Token,
+};
 
 pub type FieldName = String;
 pub type IndexName = String;
@@ -6,16 +11,39 @@ pub type TableName = String;
 pub type ViewName = String;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum DeleteNode {}
+pub enum ConstantNode {
+    Int(i32),
+    Varchar(String),
+}
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum InsertNode {}
+pub enum Expression {
+    Field(FieldName),
+    Constant(ConstantNode),
+}
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum SelectNode {}
+pub struct Term(Expression, Expression);
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum UpdateNode {}
+pub struct Predicate(Vec<Term>);
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct DeleteNode(TableName, Option<Predicate>);
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct InsertNode(TableName, Vec<FieldName>, Vec<ConstantNode>);
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct SelectNode(Vec<FieldName>, Vec<TableName>, Option<Predicate>);
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct UpdateNode {
+    id: String,
+    field: FieldName,
+    expr: Expression,
+    where_clause: Option<Predicate>,
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum FieldType {
@@ -31,7 +59,7 @@ pub type FieldDefinitions = Vec<FieldDefinition>;
 pub enum CreateNode {
     Table(TableName, FieldDefinitions),
     View(ViewName, SelectNode),
-    Index(IndexName, FieldName),
+    Index(IndexName, TableName, FieldName),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -44,181 +72,425 @@ pub enum RootNode {
 }
 
 pub struct Parser<'a> {
-    lexer: Lexer<'a>,
+    //lexer: Lexer<'a>,
+    lexer: Peekable<Lexer<'a>>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        Self { lexer }
+        Self {
+            lexer: lexer.peekable(),
+        }
     }
 
     fn parse_varchar_type(&mut self) -> Result<FieldType, String> {
-        if self
-            .lexer
-            .next()
-            .map_err(|_| "failed to parse left parenthesis")?
-            != Token::LeftParen
-        {
-            return Err("Did not find expected left parenthesis".to_string());
-        }
+        self.expect_token(Token::LeftParen)?;
 
-        return if let Token::IntegerConst(int) = self
-            .lexer
-            .next()
-            .map_err(|_| "failed to parse varchar length")?
-        {
-            // Read the closing parenthesis
-            if Token::RightParen
-                != self
-                    .lexer
-                    .next()
-                    .map_err(|_| "failed to parse closing parenthesis")?
-            {
-                Err("Did not find closing right parenthesis".to_string())
-            } else {
-                Ok(FieldType::Varchar(int))
-            }
+        if let Token::IntegerConst(int) = self.next_token()? {
+            self.expect_token(Token::RightParen)?;
+
+            Ok(FieldType::Varchar(int))
         } else {
             Err("Did not find expected varchar length".to_string())
-        };
+        }
+    }
+
+    fn parse_constant(&mut self) -> Result<ConstantNode, String> {
+        let next_token = self.next_token()?;
+        match next_token {
+            Token::VarcharConst(val) => Ok(ConstantNode::Varchar(val)),
+            Token::IntegerConst(val) => Ok(ConstantNode::Int(val)),
+            _ => Err(format!("Expected constant, found {:?}", next_token)),
+        }
+    }
+
+    fn parse_expression(&mut self) -> Result<Expression, String> {
+        let next_token = self.next_token()?;
+        match next_token {
+            Token::Identifier(id) => Ok(Expression::Field(id)),
+            Token::VarcharConst(val) => Ok(Expression::Constant(ConstantNode::Varchar(val))),
+            Token::IntegerConst(val) => Ok(Expression::Constant(ConstantNode::Int(val))),
+            _ => Err(format!(
+                "Invalid token found in expression: {:?}",
+                next_token
+            )),
+        }
+    }
+
+    fn parse_term(&mut self) -> Result<Term, String> {
+        let lexpr = self.parse_expression()?;
+        self.expect_token(Token::Equal)?;
+        let rexpr = self.parse_expression()?;
+
+        Ok(Term(lexpr, rexpr))
+    }
+
+    fn parse_predicate(&mut self) -> Result<Predicate, String> {
+        let mut terms = vec![self.parse_term()?];
+
+        while self.next_token_is(Token::And) {
+            self.expect_token(Token::And)?;
+            terms.push(self.parse_term()?);
+        }
+
+        Ok(Predicate(terms))
     }
 
     fn parse_type_def(&mut self) -> Result<FieldType, String> {
-        match self
-            .lexer
-            .next()
-            .map_err(|_| "failed to parse field type")?
-        {
+        match self.next_token()? {
             Token::Int => Ok(FieldType::Int),
             Token::Varchar => Ok(self.parse_varchar_type()?),
             _ => Err("expected type definition".to_string()),
         }
     }
 
-    fn parse_field_def(&mut self) -> Result<FieldDefinition, String> {
-        if let Token::Identifier(field_name) = self
-            .lexer
-            .next()
-            .map_err(|_| "failed to parse field id token")?
-        {
-            Ok(FieldDefinition(field_name, self.parse_type_def()?))
+    fn parse_identifier(&mut self) -> Result<String, String> {
+        let tok = self.next_token()?;
+        if let Token::Identifier(id) = tok {
+            Ok(id)
         } else {
-            Err("Failed to parse field name".to_string())
+            Err(format!("expected identifier token, found {:?}", tok))
         }
     }
 
+    fn parse_field_def(&mut self) -> Result<FieldDefinition, String> {
+        Ok(FieldDefinition(
+            self.parse_identifier()?,
+            self.parse_type_def()?,
+        ))
+    }
+
     fn parse_field_defs(&mut self) -> Result<FieldDefinitions, String> {
-        match self
-            .lexer
-            .next()
-            .map_err(|_| "failed to parse table name identifier")?
-        {
+        match self.next_token()? {
             Token::LeftParen => {
                 let mut field_defs: FieldDefinitions = vec![self.parse_field_def()?];
 
                 loop {
-                    match self.lexer.next() {
-                        Ok(Token::Comma) => field_defs.push(self.parse_field_def()?),
-                        Ok(Token::RightParen) => return Ok(field_defs),
+                    match self.next_token()? {
+                        Token::Comma => field_defs.push(self.parse_field_def()?),
+                        Token::RightParen => return Ok(field_defs),
                         _ => {
-                            return Err(
-                                "did not find closing parenthesis of field definitions".to_string()
-                            )
+                            return Err("did not finding closing parenthesis of field definitions"
+                                .to_string())
                         }
                     }
                 }
             }
-            _ => Err("Failed to parse left parenthesis in field definitions statement".to_string()),
+            _ => Err("failed to read left parenthesis of field definitions".to_string()),
         }
     }
 
+    fn parse_identifier_list(&mut self) -> Result<Vec<String>, String> {
+        let mut identifiers = Vec::new();
+
+        loop {
+            identifiers.push(self.parse_identifier()?);
+            if !self.next_token_is(Token::Comma) {
+                break;
+            }
+            // eat the comma
+            self.expect_token(Token::Comma)?;
+        }
+
+        Ok(identifiers)
+    }
+
+    fn parse_field_list(&mut self) -> Result<Vec<FieldName>, String> {
+        self.expect_token(Token::LeftParen)?;
+
+        let fields = self.parse_identifier_list()?;
+
+        self.expect_token(Token::RightParen)?;
+        Ok(fields)
+    }
+
+    fn parse_constant_list(&mut self) -> Result<Vec<ConstantNode>, String> {
+        self.expect_token(Token::LeftParen)?;
+
+        let mut constants = Vec::new();
+
+        loop {
+            constants.push(self.parse_constant()?);
+
+            if !self.next_token_is(Token::Comma) {
+                break;
+            }
+            // eat the comma
+            self.expect_token(Token::Comma)?;
+        }
+
+        self.expect_token(Token::RightParen)?;
+        Ok(constants)
+    }
+
     fn parse_create_table(&mut self) -> Result<CreateNode, String> {
-        if let Token::Identifier(table_name) = self
-            .lexer
-            .next()
-            .map_err(|e| "failed to parse table name identifier")?
-        {
+        if let Token::Identifier(table_name) = self.next_token()? {
             Ok(CreateNode::Table(table_name, self.parse_field_defs()?))
         } else {
-            Err("cannot parse CREATE TABLE".to_string())
+            Err("failed to parse CREATE TABLE".to_string())
         }
     }
 
     fn parse_create_view(&mut self) -> Result<CreateNode, String> {
-        if let Ok(Token::Identifier(view_name)) = self.lexer.next()
-            && Ok(Token::As) == self.lexer.next()
+        if let Token::Identifier(view_name) = self.next_token()?
+            && self.expect_token(Token::As)?
         {
             Ok(CreateNode::View(view_name, self.parse_select()?))
         } else {
-            Err("cannot parse CREATE VIEW".to_string())
+            Err("failed to parse CREATE VIEW statement".to_string())
         }
     }
 
     fn parse_create_index(&mut self) -> Result<CreateNode, String> {
-        if let Ok(Token::Identifier(index_name)) = self.lexer.next()
-            && Ok(Token::On) == self.lexer.next()
-            && let Ok(Token::Identifier(field_name)) = self.lexer.next()
+        if let Token::Identifier(index_name) = self.next_token()?
+            && self.expect_token(Token::On)?
+            && let Token::Identifier(table_name) = self.next_token()?
+            && self.expect_token(Token::LeftParen)?
+            && let Token::Identifier(field_name) = self.next_token()?
+            && self.expect_token(Token::RightParen)?
         {
-            Ok(CreateNode::Index(index_name, field_name))
+            Ok(CreateNode::Index(index_name, table_name, field_name))
         } else {
             Err("failed to parse CREATE INDEX statement".to_string())
         }
     }
 
     fn parse_create(&mut self) -> Result<CreateNode, String> {
-        // TODO: handle error
-        let typ = self.lexer.next().unwrap();
-        match typ {
-            Token::Index => self.parse_create_view(),
+        match self.next_token()? {
+            Token::Index => self.parse_create_index(),
             Token::Table => self.parse_create_table(),
             Token::View => self.parse_create_view(),
-            _ => panic!("TODO: return parse error"),
+            _ => Err("Did not find expected INDEX, TABLE, or VIEW identifier".to_string()),
+        }
+    }
+
+    fn expect_token(&mut self, tok: Token) -> Result<bool, String> {
+        let next_tok = self.next_token();
+        match next_tok {
+            Ok(tok) => Ok(true),
+            _ => Err(format!(
+                "expected token: {:?} but found {:?}",
+                tok, next_tok
+            )),
+        }
+    }
+
+    fn next_token(&mut self) -> Result<Token, String> {
+        self.lexer
+            .next()
+            .ok_or_else(|| "reached unexpected end of input".to_string())
+            .and_then(|res| res.map_err((|e| format!("lexer error: {:?}", e))))
+    }
+
+    fn next_token_is(&mut self, tok: Token) -> bool {
+        match self.lexer.peek() {
+            None => false,
+            Some(res) => match res {
+                Ok(t) if *t == tok => true,
+                _ => false,
+            },
+        }
+    }
+
+    fn parse_where_clause(&mut self) -> Result<Predicate, String> {
+        self.parse_predicate()
+    }
+
+    fn parse_optional_where_clause(&mut self) -> Result<Option<Predicate>, String> {
+        if self.next_token_is(Token::Where) {
+            // eat the `WHERE` token
+            assert!(self.expect_token(Token::Where)?);
+
+            Ok(Some(self.parse_where_clause()?))
+        } else {
+            Ok(None)
         }
     }
 
     fn parse_update(&mut self) -> Result<UpdateNode, String> {
-        Err("TODO parse UPDATE".to_string())
+        let next = self.next_token()?;
+        if let Token::Identifier(id_name) = next {
+            self.expect_token(Token::Set)?;
+            let field_name = self.parse_identifier()?;
+            self.expect_token(Token::Equal)?;
+            let expr = self.parse_expression()?;
+
+            let where_clause = self.parse_optional_where_clause()?;
+
+            Ok(UpdateNode {
+                id: id_name,
+                field: field_name,
+                expr,
+                where_clause,
+            })
+        } else {
+            Err("failed to parse id name in update clause".to_string())
+        }
     }
 
     fn parse_delete(&mut self) -> Result<DeleteNode, String> {
-        Err("TODO parse DELETE".to_string())
+        if Token::From == self.next_token()?
+            && let Token::Identifier(table_name) = self.next_token()?
+        {
+            let where_clause = self.parse_optional_where_clause()?;
+            Ok(DeleteNode(table_name, where_clause))
+        } else {
+            Err("Failed to parse delete clause".to_string())
+        }
     }
 
     fn parse_insert(&mut self) -> Result<InsertNode, String> {
-        Err("TODO parse INSERT".to_string())
+        self.expect_token(Token::Into)?;
+
+        if let Token::Identifier(table_name) = self.next_token()? {
+            let field_list = self.parse_field_list()?;
+            self.expect_token(Token::Values)?;
+            let const_list = self.parse_constant_list()?;
+
+            Ok(InsertNode(table_name, field_list, const_list))
+        } else {
+            Err("expected table identifier".to_string())
+        }
+    }
+
+    fn parse_table_list(&mut self) -> Result<Vec<TableName>, String> {
+        self.parse_identifier_list()
+    }
+
+    fn parse_select_list(&mut self) -> Result<Vec<FieldName>, String> {
+        self.parse_identifier_list()
     }
 
     fn parse_select(&mut self) -> Result<SelectNode, String> {
-        Err("TODO parse SELECT".to_string())
+        let select_list = self.parse_select_list()?;
+        self.expect_token(Token::From)?;
+        let table_list = self.parse_table_list()?;
+        let where_clause = self.parse_optional_where_clause()?;
+
+        Ok(SelectNode(select_list, table_list, where_clause))
     }
 
     pub fn parse(&mut self) -> Result<RootNode, String> {
-        // TODO: return error if the lexer returned an error
-        let tok = self.lexer.next().unwrap();
-        match tok {
-            Token::Create => Ok(RootNode::Create(self.parse_create()?)),
-            Token::Update => Ok(RootNode::Update(self.parse_update()?)),
-            Token::Delete => Ok(RootNode::Delete(self.parse_delete()?)),
-            Token::Insert => Ok(RootNode::Insert(self.parse_insert()?)),
-            Token::Select => Ok(RootNode::Select(self.parse_select()?)),
-            _ => Err("Failed to parse root statement".to_string()),
-        }
+        self.lexer
+            .next()
+            .ok_or_else(|| "No input provided".to_string())
+            .and_then(|tok| match tok {
+                Ok(Token::Create) => self.parse_create().map(RootNode::Create),
+                Ok(Token::Update) => self.parse_update().map(RootNode::Update),
+                Ok(Token::Delete) => self.parse_delete().map(RootNode::Delete),
+                Ok(Token::Insert) => self.parse_insert().map(RootNode::Insert),
+                Ok(Token::Select) => self.parse_select().map(RootNode::Select),
+                Ok(_) | Err(_) => Err("Failed to parse root statement".to_string()),
+            })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::lexer::Lexer;
+    use crate::parser::{lexer::Lexer, parser::*};
 
     use super::Parser;
 
-    #[test]
-    fn test_parse() {
-        let text = "CREATE TABLE test ( id int, name varchar(10) )";
-        let lexer = Lexer::new(text);
-        let mut parser = Parser::new(lexer);
+    macro_rules! parser_tests {
+        ($($name:ident: $input:expr => $expected:expr,)*) => {
+            $(
+                #[test]
+                fn $name() {
+                    let mut lex = Lexer::new($input);
+                    let mut parser = Parser::new(lex);
 
-        let ast = parser.parse().unwrap();
-        println!("{:?}", ast);
+                    let ast = parser.parse();
+                    assert_eq!(ast, $expected);
+                }
+            )*
+        }
+    }
+
+    parser_tests! {
+        test_parser_create_table_1: "CREATE TABLE test ( id int, name varchar(10))" =>
+            Ok(
+                RootNode::Create(
+                    CreateNode::Table("test".to_string(), vec![
+                        FieldDefinition("id".to_string(), FieldType::Int),
+                        FieldDefinition("name".to_string(), FieldType::Varchar(10))]))),
+
+        test_parser_create_index_1: "CREATE INDEX idx_test ON test_table ( test_field )" =>
+            Ok(
+                RootNode::Create(
+                    CreateNode::Index("idx_test".to_string(), "test_table".to_string(), "test_field".to_string())
+                )
+            ),
+
+        test_parser_update_1: "UPDATE test_table SET test_field = 10" =>
+            Ok(
+                RootNode::Update(
+                    UpdateNode{
+                        id: "test_table".to_string(),
+                        field: "test_field".to_string(),
+                        expr: Expression::Constant(ConstantNode::Int(10)),
+                        where_clause: None})
+            ),
+
+        test_parser_update_2: "UPDATE test_table SET test_field = 10 WHERE other_field = 'testing!'" =>
+            Ok(
+                RootNode::Update(
+                    UpdateNode{
+                        id: "test_table".to_string(),
+                        field: "test_field".to_string(),
+                        expr: Expression::Constant(ConstantNode::Int(10)),
+                        where_clause: Some(Predicate(vec![
+                                Term(
+                                    Expression::Field("other_field".to_string()),
+                                    Expression::Constant(ConstantNode::Varchar("'testing!'".to_string()))
+                                )
+                        ]))
+                    })
+            ),
+
+        test_parser_delete_1: "DELETE FROM test_table" =>
+            Ok(
+                RootNode::Delete(
+                    DeleteNode("test_table".to_string(), None)
+                )
+            ),
+
+        test_parser_delete_2: "DELETE FROM test_table WHERE field = 'testing!'" =>
+            Ok(
+                RootNode::Delete(
+                    DeleteNode("test_table".to_string(),
+                        Some(Predicate(vec![
+                            Term(
+                                Expression::Field("field".to_string()),
+                                Expression::Constant(ConstantNode::Varchar("'testing!'".to_string()))
+                            )]))
+                    )
+                )
+            ),
+
+        test_parser_insert: "INSERT INTO test_table ( a, b, c) VALUES (1, 'test1', 'test2')" =>
+            Ok(
+                RootNode::Insert(
+                    InsertNode("test_table".to_string(),
+                        vec!["a".to_string(), "b".to_string(), "c".to_string()],
+                        vec![
+                            ConstantNode::Int(1),
+                            ConstantNode::Varchar("'test1'".to_string()),
+                            ConstantNode::Varchar("'test2'".to_string())])
+                )
+            ),
+
+        test_parser_select: "SELECT a, b, c FROM t1, t2 WHERE a = c" =>
+            Ok(
+                RootNode::Select(
+                    SelectNode(
+                        vec!["a".to_string(), "b".to_string(), "c".to_string()],
+                        vec!["t1".to_string(), "t2".to_string()],
+                        Some(Predicate(vec![
+                            Term(
+                                Expression::Field("a".to_string()),
+                                Expression::Field("c".to_string())
+                            )])))
+                )
+            ),
     }
 }

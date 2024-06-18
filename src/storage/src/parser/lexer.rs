@@ -10,7 +10,7 @@ pub enum LexerError {
     UnterminatedVarchar(String),
 }
 
-type LexerResult = Result<Token, LexerError>;
+pub type LexerResult = Result<Token, LexerError>;
 
 pub struct Lexer<'a> {
     text: &'a str,
@@ -96,7 +96,7 @@ impl<'a> Lexer<'a> {
 
     fn scan_identifier(&mut self) -> LexerResult {
         while let Some(ch) = self.peek()
-            && ch.is_alphanumeric()
+            && (ch.is_alphanumeric() || ch == '_')
         {
             self.advance();
         }
@@ -145,12 +145,15 @@ impl<'a> Lexer<'a> {
             _ => Ok(Token::EOF),
         }
     }
+}
 
-    pub fn next(&mut self) -> LexerResult {
+impl<'a> Iterator for Lexer<'a> {
+    type Item = LexerResult;
+
+    fn next(&mut self) -> Option<Self::Item> {
         let mut tok = self.scan_token();
         self.start = self.cur;
 
-        // Continue scanning as long as we encounter whitespace
         while let Ok(t) = &tok
             && *t == Token::Whitespace
         {
@@ -158,7 +161,11 @@ impl<'a> Lexer<'a> {
             self.start = self.cur;
         }
 
-        tok
+        if tok == Ok(Token::EOF) {
+            None
+        } else {
+            Some(tok)
+        }
     }
 }
 
@@ -175,23 +182,33 @@ mod tests {
                 fn $name() {
                     let mut lex = Lexer::new($input);
                     for tok in $expected {
-                        assert_eq!(tok, lex.next());
+                        if let Some(actual) = lex.next() {
+                            assert_eq!(tok, actual);
+                        }
+                        else {
+                            panic!("unexpected end of lexer input")
+                        }
                     }
+
+                    assert_eq!(lex.next(), None)
                 }
             )*
         }
     }
 
     lexer_tests! {
-        lexer_integer_1: "1234" => vec![Ok(Token::IntegerConst(1234)), Ok(Token::EOF)],
-        lexer_integer_2: "1234,5678" => vec![Ok(Token::IntegerConst(1234)), Ok(Token::Comma), Ok(Token::IntegerConst(5678)), Ok(Token::EOF)],
-        lexer_integer_3: "1234, 5678" => vec![Ok(Token::IntegerConst(1234)), Ok(Token::Comma), Ok(Token::IntegerConst(5678)), Ok(Token::EOF)],
-        lexer_integer_4: "1234 , 5678" => vec![Ok(Token::IntegerConst(1234)), Ok(Token::Comma), Ok(Token::IntegerConst(5678)), Ok(Token::EOF)],
+        lexer_identifier_1: "okay" => vec![Ok(Token::Identifier("okay".to_string()))],
+        lexer_identifier_2: "test_snake_case" => vec![Ok(Token::Identifier("test_snake_case".to_string()))],
 
-        lexer_varchar_1: "'hello'" => vec![Ok(Token::VarcharConst("'hello'".to_string())), Ok(Token::EOF)],
-        lexer_varchar_2: "123'hello'456" => vec![Ok(Token::IntegerConst(123)), Ok(Token::VarcharConst("'hello'".to_string())), Ok(Token::IntegerConst(456)), Ok(Token::EOF)],
-        lexer_varchar_3: "123 'hello' 456" => vec![Ok(Token::IntegerConst(123)), Ok(Token::VarcharConst("'hello'".to_string())), Ok(Token::IntegerConst(456)), Ok(Token::EOF)],
-        lexer_varchar_4: "'abc" => vec![Err(LexerError::UnterminatedVarchar("'abc".to_string())), Ok(Token::EOF)],
+        lexer_integer_1: "1234" => vec![Ok(Token::IntegerConst(1234))],
+        lexer_integer_2: "1234,5678" => vec![Ok(Token::IntegerConst(1234)), Ok(Token::Comma), Ok(Token::IntegerConst(5678))],
+        lexer_integer_3: "1234, 5678" => vec![Ok(Token::IntegerConst(1234)), Ok(Token::Comma), Ok(Token::IntegerConst(5678))],
+        lexer_integer_4: "1234 , 5678" => vec![Ok(Token::IntegerConst(1234)), Ok(Token::Comma), Ok(Token::IntegerConst(5678))],
+
+        lexer_varchar_1: "'hello'" => vec![Ok(Token::VarcharConst("'hello'".to_string()))],
+        lexer_varchar_2: "123'hello'456" => vec![Ok(Token::IntegerConst(123)), Ok(Token::VarcharConst("'hello'".to_string())), Ok(Token::IntegerConst(456))],
+        lexer_varchar_3: "123 'hello' 456" => vec![Ok(Token::IntegerConst(123)), Ok(Token::VarcharConst("'hello'".to_string())), Ok(Token::IntegerConst(456))],
+        lexer_varchar_4: "'abc" => vec![Err(LexerError::UnterminatedVarchar("'abc".to_string()))],
 
         lexer_query_1: "SELECT a FROM x, z WHERE b = 3 AND c = 'hello';" => vec![
             Ok(Token::Select),
@@ -209,7 +226,6 @@ mod tests {
             Ok(Token::Equal),
             Ok(Token::VarcharConst("'hello'".to_string())),
             Ok(Token::SemiColon),
-            Ok(Token::EOF)
         ],
 
         lexer_predicate_1: "Dname = 'math' AND GradYear = SName" => vec![
@@ -220,14 +236,12 @@ mod tests {
             Ok(Token::Identifier("GradYear".to_string())),
             Ok(Token::Equal),
             Ok(Token::Identifier("SName".to_string())),
-            Ok(Token::EOF),
         ],
 
         lexer_comment_1: "1234 -- a comment\n --another comment \n 5678 \n --another!\n\n 9" => vec![
             Ok(Token::IntegerConst(1234)),
             Ok(Token::IntegerConst(5678)),
             Ok(Token::IntegerConst(9)),
-            Ok(Token::EOF)
         ],
 
         lexer_create_table_1: "CREATE TABLE test ( id int, name varchar(10) )" => vec![
@@ -244,7 +258,6 @@ mod tests {
             Ok(Token::IntegerConst(10)),
             Ok(Token::RightParen),
             Ok(Token::RightParen),
-            Ok(Token::EOF)
         ],
     }
 }
