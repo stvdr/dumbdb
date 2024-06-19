@@ -4,6 +4,7 @@ use crate::schema::Schema;
 
 use super::{constant::Constant, scan::Scan};
 
+#[derive(Clone)]
 pub enum Expression {
     FieldName(String),
     Value(Constant),

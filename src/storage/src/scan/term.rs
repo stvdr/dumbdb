@@ -2,6 +2,7 @@ use crate::schema::Schema;
 
 use super::{constant::Constant, expression::Expression, scan::Scan};
 
+#[derive(Clone)]
 pub struct Term {
     lhs: Expression,
     rhs: Expression,

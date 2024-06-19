@@ -3,7 +3,9 @@ use std::sync::{Arc, Mutex};
 use crate::{layout::Layout, schema::Schema, transaction::Transaction};
 
 use super::{
-    index_manager::IndexManager, stats_manager::StatisticsManager, table_manager::TableManager,
+    index_manager::IndexManager,
+    stats_manager::{StatisticsInfo, StatisticsManager},
+    table_manager::TableManager,
     view_manager::ViewManager,
 };
 
@@ -85,6 +87,16 @@ impl MetadataManager {
         tx: &Arc<Mutex<Transaction<P>>>,
     ) -> Option<String> {
         self.view_mgr.get_view_definition(view_name, tx)
+    }
+
+    pub fn get_stat_info<const P: usize>(
+        &mut self,
+        tbl_name: &str,
+        layout: &Layout,
+        tx: &Arc<Mutex<Transaction<P>>>,
+    ) -> Option<StatisticsInfo> {
+        let mut sm = self.stat_mgr.lock().unwrap();
+        sm.get_stats(tbl_name, layout, tx)
     }
 
     // TODO: complete index related metadata

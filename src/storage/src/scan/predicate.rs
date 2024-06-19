@@ -1,5 +1,8 @@
+use crate::planning::plan::Plan;
+
 use super::{scan::Scan, term::Term};
 
+#[derive(Clone)]
 pub struct Predicate {
     terms: Vec<Term>,
 }
@@ -17,7 +20,7 @@ impl Predicate {
         self.terms.append(&mut other.terms);
     }
 
-    pub fn is_satisfied(&self, scan: &mut dyn Scan) -> bool {
+    pub fn is_satisfied(&self, scan: &dyn Scan) -> bool {
         for t in &self.terms {
             if !t.is_satisfied(scan) {
                 return false;
@@ -25,6 +28,10 @@ impl Predicate {
         }
 
         true
+    }
+
+    pub fn reduction_factor(&self, plan: &dyn Plan) -> u64 {
+        1
     }
 }
 
@@ -66,9 +73,9 @@ mod tests {
 
         let mut tx = Arc::new(Mutex::new(db.create_transaction()));
         let layout = metadata_manager.get_table_layout("student", &tx).unwrap();
-        let mut scan = TableScan::new(tx, layout, "student");
+        let mut scan = Box::new(TableScan::new(tx, layout, "student"));
 
         scan.next();
-        assert!(pred1.is_satisfied(&mut scan));
+        assert!(pred1.is_satisfied(&*scan));
     }
 }

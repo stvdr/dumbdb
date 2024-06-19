@@ -7,12 +7,12 @@ use super::{
     scan::{ScanResult, UpdateScan},
 };
 
-pub struct SelectScan<'a> {
+pub struct SelectScan {
     predicate: Predicate,
-    scan: &'a mut dyn UpdateScan,
+    scan: Box<dyn Scan>,
 }
 
-impl<'a> SelectScan<'a> {
+impl SelectScan {
     /// Creates a new Select Scan that will iterate over an underlying `UpdateScan`.
     ///
     /// # Arguments
@@ -20,12 +20,12 @@ impl<'a> SelectScan<'a> {
     /// * `predicate` - A predicate that will be applied to each record in the underlying scan.
     ///     Only records that satisfy the predicate will be returned by this scan.
     /// * `scan` - The `UpdateScan` underlying this `SelectScan`.
-    pub fn new(predicate: Predicate, scan: &'a mut dyn UpdateScan) -> Self {
+    pub fn new(predicate: Predicate, scan: Box<dyn Scan>) -> Self {
         Self { predicate, scan }
     }
 }
 
-impl Scan for SelectScan<'_> {
+impl Scan for SelectScan {
     fn before_first(&mut self) {
         self.scan.before_first();
     }
@@ -33,7 +33,7 @@ impl Scan for SelectScan<'_> {
     fn next(&mut self) -> bool {
         while self.scan.next() {
             //if self.predicate.is_satisfied(self.scan.as_super_mut()) {
-            if self.predicate.is_satisfied(self.scan) {
+            if self.predicate.is_satisfied(&*self.scan) {
                 // This is a record that satisfies the predicate
                 return true;
             }
@@ -63,35 +63,35 @@ impl Scan for SelectScan<'_> {
     }
 }
 
-impl UpdateScan for SelectScan<'_> {
-    fn set_int(&mut self, field_name: &str, val: i32) {
-        self.scan.set_int(field_name, val);
-    }
-
-    fn set_string(&mut self, field_name: &str, val: &str) {
-        self.scan.set_string(field_name, val);
-    }
-
-    fn set_val(&mut self, field_name: &str, val: Constant) {
-        self.scan.set_val(field_name, val);
-    }
-
-    fn insert(&mut self) {
-        self.scan.insert();
-    }
-
-    fn delete(&mut self) {
-        self.scan.delete();
-    }
-
-    fn get_rid(&self) -> RID {
-        self.scan.get_rid()
-    }
-
-    fn move_to_rid(&mut self, rid: RID) {
-        self.scan.move_to_rid(rid);
-    }
-}
+//impl UpdateScan for SelectScan<'_> {
+//    fn set_int(&mut self, field_name: &str, val: i32) {
+//        self.scan.set_int(field_name, val);
+//    }
+//
+//    fn set_string(&mut self, field_name: &str, val: &str) {
+//        self.scan.set_string(field_name, val);
+//    }
+//
+//    fn set_val(&mut self, field_name: &str, val: Constant) {
+//        self.scan.set_val(field_name, val);
+//    }
+//
+//    fn insert(&mut self) {
+//        self.scan.insert();
+//    }
+//
+//    fn delete(&mut self) {
+//        self.scan.delete();
+//    }
+//
+//    fn get_rid(&self) -> RID {
+//        self.scan.get_rid()
+//    }
+//
+//    fn move_to_rid(&mut self, rid: RID) {
+//        self.scan.move_to_rid(rid);
+//    }
+//}
 
 #[cfg(test)]
 mod tests {
@@ -128,8 +128,8 @@ mod tests {
         let mut predicate = Predicate::from_term(t1);
 
         let table_layout = metadata_manager.get_table_layout("student", &tx).unwrap();
-        let mut table_scan = TableScan::new(tx.clone(), table_layout, "student");
-        let mut select_scan = SelectScan::new(predicate, &mut table_scan);
+        let mut table_scan = Box::new(TableScan::new(tx.clone(), table_layout, "student"));
+        let mut select_scan = SelectScan::new(predicate.clone(), table_scan);
 
         assert!(select_scan.next());
         assert_eq!(select_scan.get_int("sid").unwrap(), 1);

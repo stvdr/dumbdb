@@ -9,8 +9,6 @@ pub enum Error {
 
 pub type ScanResult<T> = Result<T, Error>;
 
-//pub struct Constant {}
-
 pub trait Scan {
     // Move before the first record in the scan. Immediately calling `next()` after this should
     // move to the first available record.
@@ -25,24 +23,6 @@ pub trait Scan {
     /// Close the scan and clean up as necessary.
     fn close(&mut self);
 }
-
-//pub trait IntoSuper<Super: ?Sized> {
-//    fn as_super(&self) -> &Super;
-//    fn as_super_mut(&mut self) -> &mut Super;
-//    fn into_super(self: Box<Self>) -> Box<Super>;
-//}
-//
-//impl<'a, T: 'a + Scan> IntoSuper<dyn Scan + 'a> for T {
-//    fn as_super(&self) -> &(dyn Scan + 'a) {
-//        self
-//    }
-//    fn as_super_mut(&mut self) -> &mut (dyn Scan + 'a) {
-//        self
-//    }
-//    fn into_super(self: Box<Self>) -> Box<dyn Scan + 'a> {
-//        self
-//    }
-//}
 
 // A scan that also supports updating values
 pub trait UpdateScan: Scan {

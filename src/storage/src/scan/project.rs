@@ -5,20 +5,20 @@ use super::{
     scan::{Error, Scan, ScanResult, UpdateScan},
 };
 
-pub struct ProjectScan<'a> {
-    field_list: HashSet<&'a str>,
-    scan: &'a mut dyn UpdateScan,
+pub struct ProjectScan {
+    field_list: Vec<String>,
+    scan: Box<dyn Scan>,
 }
 
-impl<'a> ProjectScan<'a> {
-    pub fn new(field_list: HashSet<&'a str>, scan: &'a mut dyn UpdateScan) -> Self {
+impl ProjectScan {
+    pub fn new(field_list: Vec<String>, scan: Box<dyn Scan>) -> Self {
         let mut s = Self { field_list, scan };
         s.before_first();
         s
     }
 }
 
-impl Scan for ProjectScan<'_> {
+impl Scan for ProjectScan {
     fn before_first(&mut self) {
         self.scan.before_first();
     }
@@ -50,7 +50,7 @@ impl Scan for ProjectScan<'_> {
     }
 
     fn has_field(&self, field_name: &str) -> bool {
-        self.field_list.contains(field_name)
+        self.field_list.contains(&field_name.to_string())
     }
 
     fn close(&mut self) {
@@ -85,13 +85,14 @@ mod tests {
         let tx = Arc::new(Mutex::new(db.create_transaction()));
         let meta_mgr = MetadataManager::new(&tx);
 
-        let mut scan = TableScan::new(
+        let scan = Box::new(TableScan::new(
             tx.clone(),
             meta_mgr.get_table_layout("student", &tx).unwrap(),
             "student",
-        );
+        ));
 
-        let mut project_scan = ProjectScan::new(HashSet::from(["sid", "grad_year"]), &mut scan);
+        let mut project_scan =
+            ProjectScan::new(vec!["sid".to_string(), "grad_year".to_string()], scan);
 
         let mut num_students = 0;
         while project_scan.next() {

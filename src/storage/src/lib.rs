@@ -27,4 +27,5 @@ mod transaction;
 mod index;
 mod metadata;
 mod parser;
+mod planning;
 mod scan;
