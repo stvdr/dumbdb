@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    index::hash_index::HashIndex, layout::Layout, scan::scan::UpdateScan, schema::Schema,
+    index::hash_index::HashIndex, layout::Layout, scan::scan::Scan, schema::Schema,
     table_scan::TableScan, transaction::Transaction,
 };
 

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use super::{
     constant::Constant,
-    scan::{Error, Scan, ScanResult, UpdateScan},
+    scan::{Error, Scan, ScanResult},
 };
 
 pub struct ProjectScan {

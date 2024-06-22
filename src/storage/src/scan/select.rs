@@ -1,10 +1,9 @@
 use crate::rid::RID;
 use crate::scan::predicate::Predicate;
-use crate::scan::scan::Scan;
 
 use super::{
     constant::Constant,
-    scan::{ScanResult, UpdateScan},
+    scan::{Scan, ScanResult},
 };
 
 pub struct SelectScan {
@@ -13,13 +12,13 @@ pub struct SelectScan {
 }
 
 impl SelectScan {
-    /// Creates a new Select Scan that will iterate over an underlying `UpdateScan`.
+    /// Creates a new Select Scan that will iterate over an underlying `Scan`.
     ///
     /// # Arguments
     ///
     /// * `predicate` - A predicate that will be applied to each record in the underlying scan.
     ///     Only records that satisfy the predicate will be returned by this scan.
-    /// * `scan` - The `UpdateScan` underlying this `SelectScan`.
+    /// * `scan` - The `Scan` underlying this `SelectScan`.
     pub fn new(predicate: Predicate, scan: Box<dyn Scan>) -> Self {
         Self { predicate, scan }
     }

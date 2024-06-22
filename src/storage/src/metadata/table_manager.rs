@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::{
-    layout::Layout, scan::scan::Scan, scan::scan::UpdateScan, schema::Schema,
-    table_scan::TableScan, transaction::Transaction,
+    layout::Layout, scan::scan::Scan, schema::Schema, table_scan::TableScan,
+    transaction::Transaction,
 };
 
 // The maximum length of the name of a table or a table field

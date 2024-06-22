@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    layout::Layout, scan::scan::Scan, scan::scan::UpdateScan, schema::Schema,
-    table_scan::TableScan, transaction::Transaction,
+    layout::Layout, scan::scan::Scan, schema::Schema, table_scan::TableScan,
+    transaction::Transaction,
 };
 
 use super::table_manager::TableManager;

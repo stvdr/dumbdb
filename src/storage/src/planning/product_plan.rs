@@ -1,1 +1,3 @@
+struct ProductPlan {}
+
 impl ProductPlan {}

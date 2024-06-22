@@ -9,7 +9,7 @@ use crate::{
     rid::RID,
     scan::{
         constant::Constant,
-        scan::{Error, Scan, ScanResult, UpdateScan},
+        scan::{Error, Scan, ScanResult},
     },
     transaction::Transaction,
 };
@@ -106,25 +106,18 @@ impl<const P: usize> Scan for TableScan<P> {
         self.layout.schema().has_field(field_name)
     }
 
-    fn close(&mut self) {
-        if !self.is_closed {
-            self.tx.lock().unwrap().unpin(&self.record_page.block());
-            self.is_closed = true;
-        }
-    }
-}
-
-impl<const P: usize> UpdateScan for TableScan<P> {
-    fn set_int(&mut self, field_name: &str, val: i32) {
+    fn set_int(&mut self, field_name: &str, val: i32) -> ScanResult<()> {
         self.record_page.set_int(self.current_slot, field_name, val);
+        Ok(())
     }
 
-    fn set_string(&mut self, field_name: &str, val: &str) {
+    fn set_string(&mut self, field_name: &str, val: &str) -> ScanResult<()> {
         self.record_page
             .set_string(self.current_slot, field_name, val);
+        Ok(())
     }
 
-    fn set_val(&mut self, field_name: &str, val: Constant) {
+    fn set_val(&mut self, field_name: &str, val: Constant) -> ScanResult<()> {
         //self.record_page.set
         match &val {
             Constant::Integer(i) => self.record_page.set_int(self.current_slot, field_name, *i),
@@ -132,13 +125,15 @@ impl<const P: usize> UpdateScan for TableScan<P> {
                 .record_page
                 .set_string(self.current_slot, field_name, s),
         }
+
+        Ok(())
     }
 
     /// Move to the next slot available for insertion and mark it USED.
     ///
     /// If there is no slot available in the current `RecordPage`, creates a new `RecordPage` and
     /// uses the first slot there.
-    fn insert(&mut self) {
+    fn insert(&mut self) -> ScanResult<()> {
         self.current_slot = self.record_page.insert_after(self.current_slot);
 
         while self.current_slot == -1 {
@@ -150,21 +145,34 @@ impl<const P: usize> UpdateScan for TableScan<P> {
 
             self.current_slot = self.record_page.insert_after(self.current_slot);
         }
+
+        Ok(())
     }
 
-    fn delete(&mut self) {
+    fn delete(&mut self) -> ScanResult<()> {
         self.record_page.delete(self.current_slot);
+
+        Ok(())
     }
 
-    fn move_to_rid(&mut self, rid: RID) {
+    fn move_to_rid(&mut self, rid: RID) -> ScanResult<()> {
         self.close();
         let blk = BlockId::new(&self.file_name, rid.block_num());
         self.record_page = RecordPage::new(self.tx.clone(), blk, self.layout.clone());
         self.current_slot = rid.slot();
+
+        Ok(())
     }
 
-    fn get_rid(&self) -> RID {
-        RID::new(self.record_page.block_number(), self.current_slot)
+    fn get_rid(&self) -> ScanResult<RID> {
+        Ok(RID::new(self.record_page.block_number(), self.current_slot))
+    }
+
+    fn close(&mut self) {
+        if !self.is_closed {
+            self.tx.lock().unwrap().unpin(&self.record_page.block());
+            self.is_closed = true;
+        }
     }
 }
 
@@ -234,7 +242,7 @@ impl<const P: usize> SetDynamic for TableScan<P> {
 #[macro_export]
 macro_rules! insert {
     ($scan:expr, $( ($($val:expr),*) ),*) => {{
-        use crate::scan::scan::{Scan, UpdateScan};
+        use crate::scan::scan::{Scan};
         use crate::table_scan::{SetDynamic, FromDynamic};
         let fields = $scan.get_layout().schema().fields();
         $scan.before_first();
