@@ -59,7 +59,7 @@ impl TableManager {
     /// # Arguments
     ///
     /// * `tbl_name` - The name of the table.
-    /// * `schema` - The schame of the table.
+    /// * `schema` - The schema of the table.
     /// * `tx` - The transaction to use when inserting into the metadata tables.
     pub fn create_table<const P: usize>(
         &self,
@@ -184,9 +184,9 @@ impl TableManager {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::{tempdir, TempDir};
+    use tempfile::tempdir;
 
-    use crate::{db::SimpleDB, tests::test_utils::default_test_db};
+    use crate::tests::test_utils::default_test_db;
 
     use super::*;
 

@@ -1,7 +1,7 @@
 use std::{
     fs,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use crate::{
@@ -22,7 +22,7 @@ pub struct SimpleDB<const PAGE_SIZE: usize> {
     file_manager: Arc<FileManager<PAGE_SIZE>>,
     lock_table: Arc<LockTable>,
     log_manager: Arc<Mutex<LogManager<PAGE_SIZE>>>,
-    //metadata_manager: Arc<Mutex<MetadataManager>>,
+    //metadata_manager: Arc<RwLock<MetadataManager>>,
 }
 
 impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
@@ -44,7 +44,7 @@ impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
         //    lock_table.clone(),
         //)));
 
-        //let metadata_manager = Arc::new(Mutex::new(MetadataManager::new(&tx)));
+        //let metadata_manager = Arc::new(RwLock::new(MetadataManager::new(&tx)));
 
         Self {
             buffer_manager,
@@ -79,4 +79,8 @@ impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
     pub fn log_manager(&self) -> Arc<Mutex<LogManager<PAGE_SIZE>>> {
         self.log_manager.clone()
     }
+
+    //pub fn metadata_manager(&self) -> Arc<RwLock<MetadataManager>> {
+    //    self.metadata_manager.clone()
+    //}
 }
