@@ -5,5 +5,5 @@ pub trait Plan {
     fn blocks_accessed(&self) -> u64;
     fn records_output(&self) -> u64;
     fn distinct_values(&self, field_name: &str) -> u64;
-    fn schema(&self) -> Schema;
+    fn schema(&self) -> &Schema;
 }

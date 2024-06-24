@@ -35,7 +35,7 @@ impl Plan for ProjectPlan {
         self.plan.distinct_values(field_name)
     }
 
-    fn schema(&self) -> Schema {
-        self.schema.clone()
+    fn schema(&self) -> &Schema {
+        &self.schema
     }
 }

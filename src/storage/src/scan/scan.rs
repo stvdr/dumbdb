@@ -1,6 +1,4 @@
-use crate::rid::RID;
-
-use super::constant::Constant;
+use crate::{parser::constant::Value, rid::RID};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Error {
@@ -19,7 +17,7 @@ pub trait Scan {
     fn next(&mut self) -> bool;
     fn get_int(&self, field_name: &str) -> ScanResult<i32>;
     fn get_string(&self, field_name: &str) -> ScanResult<String>;
-    fn get_val(&self, field_name: &str) -> ScanResult<Constant>;
+    fn get_val(&self, field_name: &str) -> ScanResult<Value>;
     fn has_field(&self, field_name: &str) -> bool;
 
     // Update support
@@ -31,7 +29,7 @@ pub trait Scan {
         Err(Error::UpdateNotSupported)
     }
 
-    fn set_val(&mut self, field_name: &str, val: Constant) -> ScanResult<()> {
+    fn set_val(&mut self, field_name: &str, val: Value) -> ScanResult<()> {
         Err(Error::UpdateNotSupported)
     }
 
@@ -57,7 +55,6 @@ pub trait Scan {
 
 // A scan that also supports updating values
 //pub trait UpdateScan: Scan {
-//    //+ IntoSuper<dyn Scan> {
 //    fn set_int(&mut self, field_name: &str, val: i32);
 //    fn set_string(&mut self, field_name: &str, val: &str);
 //    fn set_val(&mut self, field_name: &str, val: Constant);

@@ -36,8 +36,8 @@ impl Layout {
         Self::new(schema, offsets, pos)
     }
 
-    pub fn schema(&self) -> Schema {
-        self.schema.clone()
+    pub fn schema(&self) -> &Schema {
+        &self.schema
     }
 
     pub fn offset(&self, field_name: &str) -> u64 {

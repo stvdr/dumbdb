@@ -10,6 +10,7 @@ use crate::{
     file_manager::{self, FileManager},
     lock_table::LockTable,
     log_manager::LogManager,
+    metadata::metadata_manager::MetadataManager,
     transaction::Transaction,
 };
 
@@ -21,6 +22,7 @@ pub struct SimpleDB<const PAGE_SIZE: usize> {
     file_manager: Arc<FileManager<PAGE_SIZE>>,
     lock_table: Arc<LockTable>,
     log_manager: Arc<Mutex<LogManager<PAGE_SIZE>>>,
+    //metadata_manager: Arc<Mutex<MetadataManager>>,
 }
 
 impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
@@ -33,12 +35,23 @@ impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
             log_manager.clone(),
             SimpleEvictionPolicy::new(),
         )));
+        let lock_table = Arc::new(LockTable::new());
+
+        //let tx = Arc::new(Mutex::new(Transaction::new(
+        //    file_manager.clone(),
+        //    log_manager.clone(),
+        //    buffer_manager.clone(),
+        //    lock_table.clone(),
+        //)));
+
+        //let metadata_manager = Arc::new(Mutex::new(MetadataManager::new(&tx)));
 
         Self {
             buffer_manager,
             file_manager,
             log_manager,
-            lock_table: Arc::new(LockTable::new()),
+            lock_table,
+            //metadata_manager,
         }
     }
 

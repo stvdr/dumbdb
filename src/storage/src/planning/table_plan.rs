@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
     layout::Layout,
@@ -19,9 +19,9 @@ pub struct TablePlan<const P: usize> {
 }
 
 impl<const P: usize> TablePlan<P> {
-    fn new(
+    pub fn new(
         tx: Arc<Mutex<Transaction<P>>>,
-        tbl_name: String,
+        tbl_name: &str,
         meta_mgr: &mut MetadataManager,
     ) -> Self {
         let layout = meta_mgr
@@ -35,7 +35,7 @@ impl<const P: usize> TablePlan<P> {
             ));
         Self {
             tx,
-            tbl_name,
+            tbl_name: tbl_name.to_string(),
             layout,
             stat_info,
         }
@@ -63,7 +63,7 @@ impl<const P: usize> Plan for TablePlan<P> {
         self.stat_info.distinct_values(&self.tbl_name)
     }
 
-    fn schema(&self) -> Schema {
-        self.layout.schema().clone()
+    fn schema(&self) -> &Schema {
+        self.layout.schema()
     }
 }

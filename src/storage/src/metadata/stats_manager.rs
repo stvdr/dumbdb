@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use crate::{layout::Layout, scan::scan::Scan, table_scan::TableScan, transaction::Transaction};

@@ -1,8 +1,8 @@
-use crate::planning::plan::Plan;
+use crate::{planning::plan::Plan, scan::scan::Scan};
 
-use super::{scan::Scan, term::Term};
+use super::term::Term;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Predicate {
     terms: Vec<Term>,
 }
@@ -10,6 +10,10 @@ pub struct Predicate {
 impl Predicate {
     pub fn new() -> Self {
         Self { terms: vec![] }
+    }
+
+    pub fn from_terms(terms: Vec<Term>) -> Self {
+        Self { terms }
     }
 
     pub fn from_term(term: Term) -> Self {
@@ -43,7 +47,7 @@ mod tests {
 
     use crate::{
         metadata::metadata_manager::MetadataManager,
-        scan::{constant::Constant, expression::Expression},
+        parser::{constant::Value, expression::Expression},
         table_scan::TableScan,
         tests::test_utils::{create_default_tables, default_test_db},
     };
@@ -59,8 +63,8 @@ mod tests {
         let tx = Arc::new(Mutex::new(db.create_transaction()));
         let metadata_manager = MetadataManager::new(&tx);
 
-        let lhs1 = Expression::FieldName("sname".to_string());
-        let rhs1 = Expression::Value(Constant::Varchar("joe".to_string()));
+        let lhs1 = Expression::Field("sname".to_string());
+        let rhs1 = Expression::Constant(Value::Varchar("joe".to_string()));
         let t1 = Term::new(lhs1, rhs1);
 
         //let lhs2 = Expression::FieldName("major_id".to_string());

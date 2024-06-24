@@ -1,4 +1,8 @@
-use crate::scan::{predicate::Predicate, scan::Scan, select::SelectScan};
+use crate::{
+    parser::predicate::Predicate,
+    scan::{scan::Scan, select::SelectScan},
+    schema::Schema,
+};
 
 use super::plan::Plan;
 
@@ -32,7 +36,7 @@ impl Plan for SelectPlan {
         1
     }
 
-    fn schema(&self) -> crate::schema::Schema {
+    fn schema(&self) -> &Schema {
         self.plan.schema()
     }
 }

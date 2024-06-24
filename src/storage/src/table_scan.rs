@@ -5,12 +5,10 @@ use log::Record;
 use crate::{
     file_manager::BlockId,
     layout::Layout,
+    parser::constant::Value,
     record_page::RecordPage,
     rid::RID,
-    scan::{
-        constant::Constant,
-        scan::{Error, Scan, ScanResult},
-    },
+    scan::scan::{Error, Scan, ScanResult},
     transaction::Transaction,
 };
 
@@ -94,10 +92,10 @@ impl<const P: usize> Scan for TableScan<P> {
         }
     }
 
-    fn get_val(&self, field_name: &str) -> ScanResult<Constant> {
+    fn get_val(&self, field_name: &str) -> ScanResult<Value> {
         match self.layout.schema().get_field_type(field_name) {
-            Some(0) => self.get_int(field_name).map(Constant::Integer),
-            Some(1) => self.get_string(field_name).map(Constant::Varchar),
+            Some(0) => self.get_int(field_name).map(Value::Int),
+            Some(1) => self.get_string(field_name).map(Value::Varchar),
             _ => Err(Error::NonExistentField(field_name.to_string())),
         }
     }
@@ -117,11 +115,11 @@ impl<const P: usize> Scan for TableScan<P> {
         Ok(())
     }
 
-    fn set_val(&mut self, field_name: &str, val: Constant) -> ScanResult<()> {
+    fn set_val(&mut self, field_name: &str, val: Value) -> ScanResult<()> {
         //self.record_page.set
         match &val {
-            Constant::Integer(i) => self.record_page.set_int(self.current_slot, field_name, *i),
-            Constant::Varchar(s) => self
+            Value::Int(i) => self.record_page.set_int(self.current_slot, field_name, *i),
+            Value::Varchar(s) => self
                 .record_page
                 .set_string(self.current_slot, field_name, s),
         }
@@ -341,8 +339,8 @@ mod tests {
             // Assert that selecting the values as constants works as expected.
             let a_const = scan.get_val("A").unwrap();
             let b_const = scan.get_val("B").unwrap();
-            assert_eq!(a_const, Constant::Integer(i));
-            assert_eq!(b_const, Constant::Varchar(format!("string {}", 49 - i)));
+            assert_eq!(a_const, Value::Int(i));
+            assert_eq!(b_const, Value::Varchar(format!("string {}", 49 - i)));
 
             count += 1;
             i += 1;

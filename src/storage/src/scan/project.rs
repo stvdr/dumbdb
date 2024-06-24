@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
-use super::{
-    constant::Constant,
-    scan::{Error, Scan, ScanResult},
-};
+use crate::parser::constant::Value;
+
+use super::scan::{Error, Scan, ScanResult};
 
 pub struct ProjectScan {
     field_list: Vec<String>,
@@ -44,8 +43,7 @@ impl Scan for ProjectScan {
         }
     }
 
-    // TODO: implement Constants
-    fn get_val(&self, field_name: &str) -> ScanResult<Constant> {
+    fn get_val(&self, field_name: &str) -> ScanResult<Value> {
         self.scan.get_val(field_name)
     }
 

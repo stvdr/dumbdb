@@ -1,10 +1,9 @@
-use crate::rid::RID;
-use crate::scan::predicate::Predicate;
-
-use super::{
-    constant::Constant,
-    scan::{Scan, ScanResult},
+use crate::{
+    parser::{constant::Value, predicate::Predicate},
+    rid::RID,
 };
+
+use super::scan::{Scan, ScanResult};
 
 pub struct SelectScan {
     predicate: Predicate,
@@ -49,7 +48,7 @@ impl Scan for SelectScan {
         self.scan.get_string(field_name)
     }
 
-    fn get_val(&self, field_name: &str) -> ScanResult<Constant> {
+    fn get_val(&self, field_name: &str) -> ScanResult<Value> {
         self.scan.get_val(field_name)
     }
 
@@ -100,10 +99,8 @@ mod tests {
 
     use crate::{
         metadata::metadata_manager::MetadataManager,
-        scan::{
-            constant::Constant, expression::Expression, predicate::Predicate, scan::Scan,
-            term::Term,
-        },
+        parser::{constant::Value, expression::Expression, predicate::Predicate, term::Term},
+        scan::scan::Scan,
         table_scan::TableScan,
         tests::test_utils::{create_default_tables, default_test_db},
     };
@@ -119,8 +116,8 @@ mod tests {
         let tx = Arc::new(Mutex::new(db.create_transaction()));
         let metadata_manager = MetadataManager::new(&tx);
 
-        let lhs1 = Expression::FieldName("grad_year".to_string());
-        let value = Expression::Value(Constant::Integer(2021));
+        let lhs1 = Expression::Field("grad_year".to_string());
+        let value = Expression::Constant(Value::Int(2021));
         let rhs1 = value;
         let t1 = Term::new(lhs1, rhs1);
 

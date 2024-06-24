@@ -1,7 +1,11 @@
 use std::iter::Peekable;
 
 use super::{
+    constant::Value,
+    expression::Expression,
     lexer::{Lexer, LexerError, LexerResult},
+    predicate::Predicate,
+    term::Term,
     token::Token,
 };
 
@@ -11,31 +15,17 @@ pub type TableName = String;
 pub type ViewName = String;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum ConstantNode {
-    Int(i32),
-    Varchar(String),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Expression {
-    Field(FieldName),
-    Constant(ConstantNode),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Term(Expression, Expression);
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Predicate(Vec<Term>);
-
-#[derive(Debug, PartialEq, Eq)]
 pub struct DeleteNode(TableName, Option<Predicate>);
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct InsertNode(TableName, Vec<FieldName>, Vec<ConstantNode>);
+pub struct InsertNode(TableName, Vec<FieldName>, Vec<Value>);
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct SelectNode(Vec<FieldName>, Vec<TableName>, Option<Predicate>);
+pub struct SelectNode {
+    pub fields: Vec<FieldName>,
+    pub tables: Vec<TableName>,
+    pub predicate: Option<Predicate>,
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct UpdateNode {
@@ -95,11 +85,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_constant(&mut self) -> Result<ConstantNode, String> {
+    fn parse_constant(&mut self) -> Result<Value, String> {
         let next_token = self.next_token()?;
         match next_token {
-            Token::VarcharConst(val) => Ok(ConstantNode::Varchar(val)),
-            Token::IntegerConst(val) => Ok(ConstantNode::Int(val)),
+            Token::VarcharConst(val) => Ok(Value::Varchar(val)),
+            Token::IntegerConst(val) => Ok(Value::Int(val)),
             _ => Err(format!("Expected constant, found {:?}", next_token)),
         }
     }
@@ -108,8 +98,8 @@ impl<'a> Parser<'a> {
         let next_token = self.next_token()?;
         match next_token {
             Token::Identifier(id) => Ok(Expression::Field(id)),
-            Token::VarcharConst(val) => Ok(Expression::Constant(ConstantNode::Varchar(val))),
-            Token::IntegerConst(val) => Ok(Expression::Constant(ConstantNode::Int(val))),
+            Token::VarcharConst(val) => Ok(Expression::Constant(Value::Varchar(val))),
+            Token::IntegerConst(val) => Ok(Expression::Constant(Value::Int(val))),
             _ => Err(format!(
                 "Invalid token found in expression: {:?}",
                 next_token
@@ -122,7 +112,7 @@ impl<'a> Parser<'a> {
         self.expect_token(Token::Equal)?;
         let rexpr = self.parse_expression()?;
 
-        Ok(Term(lexpr, rexpr))
+        Ok(Term::new(lexpr, rexpr))
     }
 
     fn parse_predicate(&mut self) -> Result<Predicate, String> {
@@ -133,7 +123,7 @@ impl<'a> Parser<'a> {
             terms.push(self.parse_term()?);
         }
 
-        Ok(Predicate(terms))
+        Ok(Predicate::from_terms(terms))
     }
 
     fn parse_type_def(&mut self) -> Result<FieldType, String> {
@@ -204,7 +194,7 @@ impl<'a> Parser<'a> {
         Ok(fields)
     }
 
-    fn parse_constant_list(&mut self) -> Result<Vec<ConstantNode>, String> {
+    fn parse_constant_list(&mut self) -> Result<Vec<Value>, String> {
         self.expect_token(Token::LeftParen)?;
 
         let mut constants = Vec::new();
@@ -367,7 +357,11 @@ impl<'a> Parser<'a> {
         let table_list = self.parse_table_list()?;
         let where_clause = self.parse_optional_where_clause()?;
 
-        Ok(SelectNode(select_list, table_list, where_clause))
+        Ok(SelectNode {
+            fields: select_list,
+            tables: table_list,
+            predicate: where_clause,
+        })
     }
 
     pub fn parse(&mut self) -> Result<RootNode, String> {
@@ -427,7 +421,7 @@ mod tests {
                     UpdateNode{
                         id: "test_table".to_string(),
                         field: "test_field".to_string(),
-                        expr: Expression::Constant(ConstantNode::Int(10)),
+                        expr: Expression::Constant(Value::Int(10)),
                         where_clause: None})
             ),
 
@@ -437,13 +431,13 @@ mod tests {
                     UpdateNode{
                         id: "test_table".to_string(),
                         field: "test_field".to_string(),
-                        expr: Expression::Constant(ConstantNode::Int(10)),
-                        where_clause: Some(Predicate(vec![
-                                Term(
+                        expr: Expression::Constant(Value::Int(10)),
+                        where_clause: Some(Predicate::from_term(
+                                Term::new(
                                     Expression::Field("other_field".to_string()),
-                                    Expression::Constant(ConstantNode::Varchar("'testing!'".to_string()))
+                                    Expression::Constant(Value::Varchar("'testing!'".to_string()))
                                 )
-                        ]))
+                        ))
                     })
             ),
 
@@ -458,11 +452,11 @@ mod tests {
             Ok(
                 RootNode::Delete(
                     DeleteNode("test_table".to_string(),
-                        Some(Predicate(vec![
-                            Term(
+                        Some(Predicate::from_term(
+                            Term::new(
                                 Expression::Field("field".to_string()),
-                                Expression::Constant(ConstantNode::Varchar("'testing!'".to_string()))
-                            )]))
+                                Expression::Constant(Value::Varchar("'testing!'".to_string()))
+                            )))
                     )
                 )
             ),
@@ -473,23 +467,23 @@ mod tests {
                     InsertNode("test_table".to_string(),
                         vec!["a".to_string(), "b".to_string(), "c".to_string()],
                         vec![
-                            ConstantNode::Int(1),
-                            ConstantNode::Varchar("'test1'".to_string()),
-                            ConstantNode::Varchar("'test2'".to_string())])
+                            Value::Int(1),
+                            Value::Varchar("'test1'".to_string()),
+                            Value::Varchar("'test2'".to_string())])
                 )
             ),
 
         test_parser_select: "SELECT a, b, c FROM t1, t2 WHERE a = c" =>
             Ok(
                 RootNode::Select(
-                    SelectNode(
-                        vec!["a".to_string(), "b".to_string(), "c".to_string()],
-                        vec!["t1".to_string(), "t2".to_string()],
-                        Some(Predicate(vec![
-                            Term(
+                    SelectNode{
+                        fields: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+                        tables: vec!["t1".to_string(), "t2".to_string()],
+                        predicate: Some(Predicate::from_term(
+                            Term::new(
                                 Expression::Field("a".to_string()),
                                 Expression::Field("c".to_string())
-                            )])))
+                            )))}
                 )
             ),
     }

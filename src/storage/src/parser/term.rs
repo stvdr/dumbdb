@@ -1,8 +1,8 @@
-use crate::schema::Schema;
+use crate::{scan::scan::Scan, schema::Schema};
 
-use super::{constant::Constant, expression::Expression, scan::Scan};
+use super::expression::Expression;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Term {
     lhs: Expression,
     rhs: Expression,
