@@ -9,11 +9,11 @@ use crate::{
     record_page::RecordPage,
     rid::RID,
     scan::scan::{Error, Scan, ScanResult},
-    transaction::Transaction,
+    transaction::Tx,
 };
 
 pub struct TableScan {
-    tx: Arc<Mutex<Transaction>>,
+    tx: Arc<Mutex<Tx>>,
     layout: Layout,
     record_page: RecordPage,
     file_name: String,
@@ -175,7 +175,7 @@ impl Scan for TableScan {
 }
 
 impl TableScan {
-    pub fn new(tx: Arc<Mutex<Transaction>>, layout: Layout, file_name: &str) -> Self {
+    pub fn new(tx: Arc<Mutex<Tx>>, layout: Layout, file_name: &str) -> Self {
         let blk = {
             let mut ltx = tx.lock().unwrap();
             if ltx.size(file_name) == 0 {
@@ -293,12 +293,7 @@ mod tests {
             SimpleEvictionPolicy::new(),
         )));
         let lt = Arc::new(LockTable::new());
-        let t = Arc::new(Mutex::new(Transaction::new(
-            fm.clone(),
-            lm.clone(),
-            bm.clone(),
-            lt,
-        )));
+        let t = Arc::new(Mutex::new(Tx::new(fm.clone(), lm.clone(), bm.clone(), lt)));
 
         let mut schema = Schema::new();
         schema.add_int_field("A");

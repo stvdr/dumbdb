@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex, RwLock};
 
-use crate::{layout::Layout, schema::Schema, transaction::Transaction};
+use crate::{layout::Layout, schema::Schema, transaction::Tx};
 
 use super::{
     index_manager::IndexManager,
@@ -17,7 +17,7 @@ pub struct MetadataManager {
 }
 
 impl MetadataManager {
-    pub fn new(tx: &Arc<Mutex<Transaction>>) -> Self {
+    pub fn new(tx: &Arc<Mutex<Tx>>) -> Self {
         let stat_mgr = Arc::new(Mutex::new(StatisticsManager::new(tx)));
 
         Self {
@@ -36,12 +36,7 @@ impl MetadataManager {
     /// * `tbl_name` - The name of the table.
     /// * `schema` - The table's schema.
     /// * `tx` - The transaction that table creation will run inside of.
-    pub fn create_table(
-        &self,
-        tbl_name: &str,
-        schema: &Schema,
-        tx: &Arc<Mutex<Transaction>>,
-    ) -> bool {
+    pub fn create_table(&self, tbl_name: &str, schema: &Schema, tx: &Arc<Mutex<Tx>>) -> bool {
         self.tbl_mgr.create_table(tbl_name, schema, tx)
     }
 
@@ -51,7 +46,7 @@ impl MetadataManager {
     ///
     /// * `tbl_name` - The name of the table.
     /// * `tx` - The transaction used to read the table from metadata tables.
-    pub fn get_table_layout(&self, tbl_name: &str, tx: &Arc<Mutex<Transaction>>) -> Option<Layout> {
+    pub fn get_table_layout(&self, tbl_name: &str, tx: &Arc<Mutex<Tx>>) -> Option<Layout> {
         self.tbl_mgr.get_table_layout(tbl_name, tx)
     }
 
@@ -66,7 +61,7 @@ impl MetadataManager {
         &self,
         view_name: &str,
         view_def: &str,
-        tx: &Arc<Mutex<Transaction>>,
+        tx: &Arc<Mutex<Tx>>,
     ) -> Result<(), String> {
         self.view_mgr.create_view(view_name, view_def, tx)
     }
@@ -77,7 +72,7 @@ impl MetadataManager {
     ///
     /// * `view_name` - The name of the view.
     /// * `tx` - The transaction used to read the view from metadata tables.
-    pub fn get_view_def(&self, view_name: &str, tx: &Arc<Mutex<Transaction>>) -> Option<String> {
+    pub fn get_view_def(&self, view_name: &str, tx: &Arc<Mutex<Tx>>) -> Option<String> {
         self.view_mgr.get_view_definition(view_name, tx)
     }
 
@@ -85,7 +80,7 @@ impl MetadataManager {
         &mut self,
         tbl_name: &str,
         layout: &Layout,
-        tx: &Arc<Mutex<Transaction>>,
+        tx: &Arc<Mutex<Tx>>,
     ) -> Option<StatisticsInfo> {
         let mut sm = self.stat_mgr.lock().unwrap();
         sm.get_stats(tbl_name, layout, tx)

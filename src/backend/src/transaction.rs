@@ -13,7 +13,7 @@ use crate::{
 static NEXT_TRANSACTION_NUM: AtomicI64 = AtomicI64::new(0);
 static END_OF_FILE: u64 = std::u64::MAX;
 
-pub struct Transaction {
+pub struct Tx {
     concurrency_mgr: ConcurrencyManager,
     buffer_mgr: Arc<Mutex<BufferManager<SimpleEvictionPolicy>>>,
     log_mgr: Arc<Mutex<LogManager>>,
@@ -22,7 +22,7 @@ pub struct Transaction {
     buffer_list: Arc<Mutex<BufferList>>,
 }
 
-impl Transaction {
+impl Tx {
     pub fn new(
         file_mgr: Arc<FileManager>,
         log_mgr: Arc<Mutex<LogManager>>,
@@ -331,14 +331,14 @@ mod tests {
         let blk = fm.append_block("test", &Page::new()).unwrap();
 
         // Verify that committed sets are read from a separate transaction
-        let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
         tx.set_int(&blk, 0, 10, true);
         tx.set_string(&blk, 100, "test string", true);
         assert_eq!(tx.get_int(&blk, 0), 10);
         assert_eq!(tx.get_string(&blk, 100), "test string");
         tx.commit();
-        let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
         let int_val: i32 = tx.get_int(&blk, 0);
         let str_val: String = tx.get_string(&blk, 100);
@@ -347,7 +347,7 @@ mod tests {
         tx.commit();
 
         // Verify that sets are read in the same transaction
-        let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
         tx.set_int(&blk, 0, 20, true);
         tx.set_string(&blk, 100, "another test string", true);
@@ -358,7 +358,7 @@ mod tests {
         tx.rollback();
 
         // Verify that the above data is not read after rollback
-        let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
         let int_val: i32 = tx.get_int(&blk, 0);
         let str_val: String = tx.get_string(&blk, 100);
@@ -367,7 +367,7 @@ mod tests {
         tx.commit();
 
         // Verify that multiple integers and string get rolled back
-        let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
         tx.set_int(&blk, 20, 3, true);
         tx.set_int(&blk, 40, 6, true);
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(tx.get_string(&blk, 400), "test3");
         tx.rollback();
 
-        let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk);
         assert_eq!(tx.get_int(&blk, 20), 0);
         assert_eq!(tx.get_int(&blk, 40), 0);
@@ -415,9 +415,9 @@ mod tests {
         let blk1 = fm.append_block("test", &Page::new()).unwrap();
         let blk2 = fm.append_block("test", &Page::new()).unwrap();
 
-        let mut tx_a = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
-        let mut tx_b = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
-        let mut tx_c = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx_a = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx_b = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx_c = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
 
         let (send_a, recv_a) = mpsc::channel::<bool>();
         let (send_c, recv_c) = mpsc::channel::<bool>();
@@ -507,7 +507,7 @@ mod tests {
         handle_2.join().unwrap();
         handle_3.join().unwrap();
 
-        let mut tx = Transaction::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
+        let mut tx = Tx::new(fm.clone(), lm.clone(), bm.clone(), locks.clone());
         tx.pin(&blk1);
         tx.pin(&blk2);
 

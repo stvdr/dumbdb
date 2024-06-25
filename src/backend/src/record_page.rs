@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{block_id::BlockId, layout::Layout, transaction::Transaction};
+use crate::{block_id::BlockId, layout::Layout, transaction::Tx};
 
 // TODO: slot should be a type
 
@@ -8,13 +8,13 @@ const EMPTY: i32 = 0;
 const USED: i32 = 1;
 
 pub struct RecordPage {
-    tx: Arc<Mutex<Transaction>>,
+    tx: Arc<Mutex<Tx>>,
     blk: BlockId,
     layout: Layout,
 }
 
 impl RecordPage {
-    pub fn new(tx: Arc<Mutex<Transaction>>, blk: BlockId, layout: Layout) -> Self {
+    pub fn new(tx: Arc<Mutex<Tx>>, blk: BlockId, layout: Layout) -> Self {
         tx.lock().unwrap().pin(&blk);
 
         Self {
@@ -248,12 +248,7 @@ mod tests {
             SimpleEvictionPolicy::new(),
         )));
         let lt = Arc::new(LockTable::new());
-        let t = Arc::new(Mutex::new(Transaction::new(
-            fm.clone(),
-            lm.clone(),
-            bm.clone(),
-            lt,
-        )));
+        let t = Arc::new(Mutex::new(Tx::new(fm.clone(), lm.clone(), bm.clone(), lt)));
 
         let blk = t.lock().unwrap().append("T");
 

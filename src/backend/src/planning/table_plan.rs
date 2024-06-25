@@ -9,24 +9,20 @@ use crate::{
     scan::scan::Scan,
     schema::Schema,
     table_scan::TableScan,
-    transaction::Transaction,
+    transaction::Tx,
 };
 
 use super::plan::Plan;
 
 pub struct TablePlan {
-    tx: Arc<Mutex<Transaction>>,
+    tx: Arc<Mutex<Tx>>,
     tbl_name: String,
     layout: Layout,
     stat_info: StatisticsInfo,
 }
 
 impl TablePlan {
-    pub fn new(
-        tx: Arc<Mutex<Transaction>>,
-        tbl_name: &str,
-        meta_mgr: &mut MetadataManager,
-    ) -> Self {
+    pub fn new(tx: Arc<Mutex<Tx>>, tbl_name: &str, meta_mgr: &mut MetadataManager) -> Self {
         let layout = meta_mgr
             .get_table_layout(&tbl_name, &tx)
             .expect(&format!("cannot find table: {}", tbl_name));

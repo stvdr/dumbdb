@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{block_id::BlockId, transaction::Transaction};
+use crate::{block_id::BlockId, transaction::Tx};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum LogRecord {
@@ -29,7 +29,7 @@ pub enum LogRecord {
 }
 
 impl LogRecord {
-    pub fn undo(&self, tx: &mut Transaction) {
+    pub fn undo(&self, tx: &mut Tx) {
         match self {
             LogRecord::SetInt {
                 tx_num,

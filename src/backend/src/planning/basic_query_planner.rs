@@ -6,7 +6,7 @@ use crate::{
         lexer::Lexer,
         parser::{Parser, RootNode, SelectNode},
     },
-    transaction::Transaction,
+    transaction::Tx,
 };
 
 use super::{
@@ -25,11 +25,7 @@ impl BasicQueryPlanner {
 }
 
 impl QueryPlanner for BasicQueryPlanner {
-    fn create_plan(
-        &self,
-        data: &SelectNode,
-        tx: Arc<Mutex<Transaction>>,
-    ) -> Result<Box<dyn Plan>, String> {
+    fn create_plan(&self, data: &SelectNode, tx: Arc<Mutex<Tx>>) -> Result<Box<dyn Plan>, String> {
         let mut plans = vec![];
         for tblname in &data.tables {
             let view_def = self

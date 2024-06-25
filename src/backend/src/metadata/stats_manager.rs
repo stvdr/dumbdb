@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use crate::{layout::Layout, scan::scan::Scan, table_scan::TableScan, transaction::Transaction};
+use crate::{layout::Layout, scan::scan::Scan, table_scan::TableScan, transaction::Tx};
 
 use super::table_manager::TableManager;
 
@@ -42,7 +42,7 @@ pub struct StatisticsManager {
 }
 
 impl StatisticsManager {
-    pub fn new(tx: &Arc<Mutex<Transaction>>) -> Self {
+    pub fn new(tx: &Arc<Mutex<Tx>>) -> Self {
         let mut s = Self {
             tbl_mgr: TableManager::new(tx),
             tbl_stats: Arc::new(Mutex::new(HashMap::new())),
@@ -58,7 +58,7 @@ impl StatisticsManager {
         &mut self,
         tbl_name: &str,
         layout: &Layout,
-        tx: &Arc<Mutex<Transaction>>,
+        tx: &Arc<Mutex<Tx>>,
     ) -> Option<StatisticsInfo> {
         self.num_calls += 1;
 
@@ -73,7 +73,7 @@ impl StatisticsManager {
         Some(stats.clone())
     }
 
-    fn refresh_stats(&mut self, tx: &Arc<Mutex<Transaction>>) {
+    fn refresh_stats(&mut self, tx: &Arc<Mutex<Tx>>) {
         let mut new_stats = HashMap::new();
         self.num_calls = 0;
         let tcat_layout = self
@@ -100,7 +100,7 @@ impl StatisticsManager {
         &self,
         tbl_name: &str,
         layout: &Layout,
-        tx: &Arc<Mutex<Transaction>>,
+        tx: &Arc<Mutex<Tx>>,
     ) -> StatisticsInfo {
         let mut num_records = 0;
         let mut num_blocks = 0;

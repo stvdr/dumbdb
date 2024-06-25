@@ -1,15 +1,11 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{parser::parser::SelectNode, transaction::Transaction};
+use crate::{parser::parser::SelectNode, transaction::Tx};
 
 use super::plan::Plan;
 
 // TODO: figure out the result type
 
 pub trait QueryPlanner {
-    fn create_plan(
-        &self,
-        data: &SelectNode,
-        tx: Arc<Mutex<Transaction>>,
-    ) -> Result<Box<dyn Plan>, String>;
+    fn create_plan(&self, data: &SelectNode, tx: Arc<Mutex<Tx>>) -> Result<Box<dyn Plan>, String>;
 }

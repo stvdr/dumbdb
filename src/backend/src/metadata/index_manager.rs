@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::{
     index::hash_index::HashIndex, layout::Layout, scan::scan::Scan, schema::Schema,
-    table_scan::TableScan, transaction::Transaction,
+    table_scan::TableScan, transaction::Tx,
 };
 
 use super::{
@@ -13,7 +13,7 @@ use super::{
 pub struct IndexInfo {
     name: String,
     field_name: String,
-    tx: Arc<Mutex<Transaction>>,
+    tx: Arc<Mutex<Tx>>,
     layout: Layout,
     stat_info: StatisticsInfo,
 }
@@ -22,7 +22,7 @@ impl IndexInfo {
     fn new(
         name: String,
         field_name: String,
-        tx: Arc<Mutex<Transaction>>,
+        tx: Arc<Mutex<Tx>>,
         layout: Layout,
         stat_info: StatisticsInfo,
     ) -> Self {
@@ -91,7 +91,7 @@ pub struct IndexManager {
 }
 
 impl IndexManager {
-    pub fn new(stats_mgr: Arc<Mutex<StatisticsManager>>, tx: &Arc<Mutex<Transaction>>) -> Self {
+    pub fn new(stats_mgr: Arc<Mutex<StatisticsManager>>, tx: &Arc<Mutex<Tx>>) -> Self {
         let mut schema = Schema::new();
         schema.add_string_field("indexname", MAX_NAME);
         schema.add_string_field("tablename", MAX_NAME);
@@ -111,7 +111,7 @@ impl IndexManager {
         idx_name: &str,
         tbl_name: &str,
         field_name: &str,
-        tx: Arc<Mutex<Transaction>>,
+        tx: Arc<Mutex<Tx>>,
     ) {
         // TODO: verify that index does not already exist
         let mut scan = TableScan::new(tx, self.layout.clone(), "idxcat");

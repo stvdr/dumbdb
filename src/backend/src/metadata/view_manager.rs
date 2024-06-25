@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    layout::Layout, scan::scan::Scan, schema::Schema, table_scan::TableScan,
-    transaction::Transaction,
+    layout::Layout, scan::scan::Scan, schema::Schema, table_scan::TableScan, transaction::Tx,
 };
 
 use super::table_manager::TableManager;
@@ -14,7 +13,7 @@ pub struct ViewManager {
 }
 
 impl ViewManager {
-    fn create_metadata(&self, tx: &Arc<Mutex<Transaction>>) {
+    fn create_metadata(&self, tx: &Arc<Mutex<Tx>>) {
         if self.tbl_mgr.get_table_layout("viewcat", tx).is_some() {
             // If the metadata table already exists, we don't need to re-create it
             return;
@@ -30,7 +29,7 @@ impl ViewManager {
     /// not already exist.
     ///
     /// Note: This assumes that TableManager's metadata tables have already been created elsewhere.
-    pub fn new(tx: &Arc<Mutex<Transaction>>) -> Self {
+    pub fn new(tx: &Arc<Mutex<Tx>>) -> Self {
         let s = Self {
             tbl_mgr: TableManager::new(tx),
         };
@@ -51,7 +50,7 @@ impl ViewManager {
         &self,
         view_name: &str,
         view_def: &str,
-        tx: &Arc<Mutex<Transaction>>,
+        tx: &Arc<Mutex<Tx>>,
     ) -> Result<(), String> {
         let layout = self
             .tbl_mgr
@@ -70,11 +69,7 @@ impl ViewManager {
     ///
     /// * `view_name` - The name of the view.
     /// * `tx` - The transaction to use when retrieving the view from the metadata tables.
-    pub fn get_view_definition(
-        &self,
-        view_name: &str,
-        tx: &Arc<Mutex<Transaction>>,
-    ) -> Option<String> {
+    pub fn get_view_definition(&self, view_name: &str, tx: &Arc<Mutex<Tx>>) -> Option<String> {
         let layout = self.tbl_mgr.get_table_layout("viewcat", tx)?;
         let mut scan = TableScan::new(tx.clone(), layout, "viewcat");
         while scan.next() {

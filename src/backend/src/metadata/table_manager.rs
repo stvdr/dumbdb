@@ -4,8 +4,7 @@ use std::{
 };
 
 use crate::{
-    layout::Layout, scan::scan::Scan, schema::Schema, table_scan::TableScan,
-    transaction::Transaction,
+    layout::Layout, scan::scan::Scan, schema::Schema, table_scan::TableScan, transaction::Tx,
 };
 
 // The maximum length of the name of a table or a table field
@@ -41,7 +40,7 @@ impl TableManager {
     /// # Arguments
     ///
     /// * `tx` - The transaction to use when creating the backing metadata tables.
-    pub fn new(tx: &Arc<Mutex<Transaction>>) -> Self {
+    pub fn new(tx: &Arc<Mutex<Tx>>) -> Self {
         let (tcat_layout, fcat_layout) = Self::create_layouts();
         let mut sel = Self {
             tcat_layout,
@@ -61,12 +60,7 @@ impl TableManager {
     /// * `tbl_name` - The name of the table.
     /// * `schema` - The schema of the table.
     /// * `tx` - The transaction to use when inserting into the metadata tables.
-    pub fn create_table(
-        &self,
-        tbl_name: &str,
-        schema: &Schema,
-        tx: &Arc<Mutex<Transaction>>,
-    ) -> bool {
+    pub fn create_table(&self, tbl_name: &str, schema: &Schema, tx: &Arc<Mutex<Tx>>) -> bool {
         let new_tbl_layout = Layout::from_schema(schema.clone());
 
         {
@@ -117,7 +111,7 @@ impl TableManager {
     ///
     /// * `tbl_name` - The name of the table that already exists.
     /// * `tx` - The transaction to use when reading from the metadata tables.
-    pub fn get_table_layout(&self, tbl_name: &str, tx: &Arc<Mutex<Transaction>>) -> Option<Layout> {
+    pub fn get_table_layout(&self, tbl_name: &str, tx: &Arc<Mutex<Tx>>) -> Option<Layout> {
         let mut schema = Schema::new();
         let mut slot_size = None;
         {

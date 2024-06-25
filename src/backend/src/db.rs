@@ -11,7 +11,7 @@ use crate::{
     lock_table::LockTable,
     log_manager::LogManager,
     metadata::metadata_manager::MetadataManager,
-    transaction::Transaction,
+    transaction::Tx,
 };
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
@@ -36,7 +36,7 @@ impl SimpleDB {
         )));
         let lock_table = Arc::new(LockTable::new());
 
-        let tx = Arc::new(Mutex::new(Transaction::new(
+        let tx = Arc::new(Mutex::new(Tx::new(
             file_manager.clone(),
             log_manager.clone(),
             buffer_manager.clone(),
@@ -56,8 +56,8 @@ impl SimpleDB {
         }
     }
 
-    pub fn new_tx(&self) -> Transaction {
-        Transaction::new(
+    pub fn new_tx(&self) -> Tx {
+        Tx::new(
             self.file_manager(),
             self.log_manager(),
             self.buffer_manager(),
