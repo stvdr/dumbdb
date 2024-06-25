@@ -131,18 +131,13 @@ mod tests {
         let mut planner = BasicUpdatePlanner::new(mm.clone());
 
         {
-            // Create a table
+            // Create a test table
             let tx = Arc::new(Mutex::new(db.new_tx()));
-            planner.execute_create(
-                &CreateNode::Table(
-                    "test".to_string(),
-                    vec![
-                        FieldDefinition("f1".to_string(), FieldType::Int),
-                        FieldDefinition("f2".to_string(), FieldType::Varchar(10)),
-                    ],
-                ),
-                tx.clone(),
-            );
+            if let Ok(RootNode::Create(create)) =
+                parse("CREATE TABLE test ( f1 int, f2 varchar(10) )")
+            {
+                planner.execute_create(&create, tx.clone());
+            }
 
             tx.lock().unwrap().commit();
         }
