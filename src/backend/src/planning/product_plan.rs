@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{
     scan::{product::ProductScan, scan::Scan},
     schema::Schema,
@@ -46,5 +48,11 @@ impl Plan for ProductPlan {
 
     fn schema(&self) -> &Schema {
         &self.schema
+    }
+}
+
+impl Display for ProductPlan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
     }
 }

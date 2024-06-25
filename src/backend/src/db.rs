@@ -82,7 +82,7 @@ impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
         self.log_manager.clone()
     }
 
-    //pub fn metadata_manager(&self) -> Arc<RwLock<MetadataManager>> {
-    //    self.metadata_manager.clone()
-    //}
+    pub fn metadata_manager(&self) -> Arc<RwLock<MetadataManager>> {
+        self.metadata_manager.clone()
+    }
 }

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{scan::project::ProjectScan, schema::Schema};
 
 use super::plan::Plan;
@@ -37,5 +39,11 @@ impl Plan for ProjectPlan {
 
     fn schema(&self) -> &Schema {
         &self.schema
+    }
+}
+
+impl Display for ProjectPlan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
     }
 }

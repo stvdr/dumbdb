@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{
     parser::predicate::Predicate,
     scan::{scan::Scan, select::SelectScan},
@@ -38,5 +40,11 @@ impl Plan for SelectPlan {
 
     fn schema(&self) -> &Schema {
         self.plan.schema()
+    }
+}
+
+impl Display for SelectPlan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
     }
 }

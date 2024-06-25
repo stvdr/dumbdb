@@ -8,7 +8,7 @@ use super::plan::Plan;
 
 pub trait QueryPlanner {
     fn create_plan<const P: usize>(
-        &mut self,
+        &self,
         data: &SelectNode,
         tx: Arc<Mutex<Transaction<P>>>,
     ) -> Result<Box<dyn Plan>, String>;

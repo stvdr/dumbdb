@@ -1,6 +1,8 @@
+use std::fmt::Display;
+
 use crate::{scan::scan::Scan, schema::Schema};
 
-pub trait Plan {
+pub trait Plan: Display {
     fn open(&mut self) -> Box<dyn Scan>;
     fn blocks_accessed(&self) -> u64;
     fn records_output(&self) -> u64;

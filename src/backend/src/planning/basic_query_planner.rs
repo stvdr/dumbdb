@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
     metadata::metadata_manager::MetadataManager,
@@ -15,18 +15,18 @@ use super::{
 };
 
 struct BasicQueryPlanner {
-    metadata_mgr: Arc<Mutex<MetadataManager>>,
+    metadata_mgr: Arc<RwLock<MetadataManager>>,
 }
 
 impl BasicQueryPlanner {
-    pub fn new(metadata_mgr: Arc<Mutex<MetadataManager>>) -> Self {
+    pub fn new(metadata_mgr: Arc<RwLock<MetadataManager>>) -> Self {
         Self { metadata_mgr }
     }
 }
 
 impl QueryPlanner for BasicQueryPlanner {
     fn create_plan<const P: usize>(
-        &mut self,
+        &self,
         data: &SelectNode,
         tx: Arc<Mutex<Transaction<P>>>,
     ) -> Result<Box<dyn Plan>, String> {
@@ -34,7 +34,7 @@ impl QueryPlanner for BasicQueryPlanner {
         for tblname in &data.tables {
             let view_def = self
                 .metadata_mgr
-                .lock()
+                .read()
                 .unwrap()
                 .get_view_def(&tblname, &tx);
 
@@ -54,7 +54,7 @@ impl QueryPlanner for BasicQueryPlanner {
                     }
                 }
                 None => {
-                    let mut locked_mgr = self.metadata_mgr.lock().unwrap();
+                    let mut locked_mgr = self.metadata_mgr.write().unwrap();
                     Box::new(TablePlan::new(tx.clone(), tblname, &mut locked_mgr))
                 }
             };
@@ -80,11 +80,44 @@ impl QueryPlanner for BasicQueryPlanner {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tempfile::tempdir;
+
+    use crate::{
+        parser::{
+            lexer::Lexer,
+            parser::{Parser, RootNode, SelectNode},
+        },
+        planning::query_planner::QueryPlanner,
+        tests::test_utils::{create_default_tables, default_test_db, test_db},
+    };
+
     use super::BasicQueryPlanner;
 
     #[test]
     fn test_build_basic_plan() {
-        //let _ = env_logger::try_init();
-        //let planner = BasicQueryPlanner::new();
+        let temp_dir = tempdir().unwrap();
+        let mut db = default_test_db(&temp_dir);
+        create_default_tables(&mut db);
+
+        let mut planner = BasicQueryPlanner::new(db.metadata_manager());
+
+        let lexer = Lexer::new("SELECT sid, sname, grad_year FROM student WHERE sid = 4");
+        let mut parser = Parser::new(lexer);
+        let ast = parser.parse().unwrap();
+
+        let tx = Arc::new(Mutex::new(db.create_transaction()));
+        if let RootNode::Select(sel) = ast {
+            let mut plan = planner.create_plan(&sel, tx).unwrap();
+            let mut scan = plan.open();
+            scan.next();
+            assert_eq!(4, scan.get_int("sid").unwrap());
+            assert_eq!("sue", scan.get_string("sname").unwrap());
+            assert_eq!(2022, scan.get_int("grad_year").unwrap());
+            assert!(!scan.next());
+        } else {
+            panic!("failed to parse select statement");
+        }
     }
 }

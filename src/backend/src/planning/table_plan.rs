@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::{
+    fmt::Display,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use crate::{
     layout::Layout,
@@ -65,5 +68,11 @@ impl<const P: usize> Plan for TablePlan<P> {
 
     fn schema(&self) -> &Schema {
         self.layout.schema()
+    }
+}
+
+impl<const P: usize> Display for TablePlan<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
     }
 }
