@@ -13,6 +13,8 @@ use crate::{
 static NEXT_TRANSACTION_NUM: AtomicI64 = AtomicI64::new(0);
 static END_OF_FILE: u64 = std::u64::MAX;
 
+// TODO: commit/rollback on drop
+
 pub struct Tx {
     concurrency_mgr: ConcurrencyManager,
     buffer_mgr: Arc<Mutex<BufferManager<SimpleEvictionPolicy>>>,

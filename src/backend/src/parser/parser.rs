@@ -15,7 +15,7 @@ pub type TableName = String;
 pub type ViewName = String;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct DeleteNode(TableName, Option<Predicate>);
+pub struct DeleteNode(pub TableName, pub Option<Predicate>);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct InsertNode(TableName, Vec<FieldName>, Vec<Value>);
@@ -42,7 +42,7 @@ pub enum FieldType {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct FieldDefinition(String, FieldType);
+pub struct FieldDefinition(pub FieldName, pub FieldType);
 pub type FieldDefinitions = Vec<FieldDefinition>;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -377,6 +377,10 @@ impl<'a> Parser<'a> {
                 Ok(_) | Err(_) => Err("Failed to parse root statement".to_string()),
             })
     }
+}
+
+pub fn parse(text: &str) -> Result<RootNode, String> {
+    Parser::new(Lexer::new(text)).parse()
 }
 
 #[cfg(test)]
