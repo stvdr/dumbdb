@@ -113,7 +113,7 @@ mod tests {
         let mut db = default_test_db(&td);
         create_default_tables(&mut db);
 
-        let tx = Arc::new(Mutex::new(db.create_transaction()));
+        let tx = Arc::new(Mutex::new(db.new_tx()));
         let metadata_manager = MetadataManager::new(&tx);
 
         let lhs1 = Expression::Field("grad_year".to_string());

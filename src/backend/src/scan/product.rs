@@ -87,7 +87,7 @@ mod tests {
         let mut db = default_test_db(&td);
         create_default_tables(&mut db);
 
-        let tx = Arc::new(Mutex::new(db.create_transaction()));
+        let tx = Arc::new(Mutex::new(db.new_tx()));
         let meta_mgr = MetadataManager::new(&tx);
 
         let mut left_scan = Box::new(TableScan::new(

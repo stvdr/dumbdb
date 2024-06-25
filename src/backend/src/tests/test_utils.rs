@@ -29,7 +29,7 @@ pub fn default_test_db(td: &TempDir) -> SimpleDB<DEFAULT_BLOCK_SIZE> {
 
 /// Create a set of default tables that can be used in unit tests.
 pub fn create_default_tables<const PAGE_SIZE: usize>(db: &mut SimpleDB<PAGE_SIZE>) {
-    let tx = Arc::new(Mutex::new(db.create_transaction()));
+    let tx = Arc::new(Mutex::new(db.new_tx()));
 
     let student_schema = make_schema! {
         "sid" => i32,

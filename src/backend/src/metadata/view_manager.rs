@@ -109,7 +109,7 @@ mod tests {
         let db = default_test_db(&td);
 
         {
-            let tx = &Arc::new(Mutex::new(db.create_transaction()));
+            let tx = &Arc::new(Mutex::new(db.new_tx()));
 
             // create a `TableManager` so that the table metadata is initialized
             let tbl_manager = TableManager::new(tx);
@@ -125,7 +125,7 @@ mod tests {
         }
 
         // Verify that the view definitions can be read in a different transaction
-        let tx = &Arc::new(Mutex::new(db.create_transaction()));
+        let tx = &Arc::new(Mutex::new(db.new_tx()));
         let view_manager = ViewManager::new(tx);
         let view1 = view_manager.get_view_definition("view_test_1", tx).unwrap();
         let view2 = view_manager.get_view_definition("view_test_2", tx).unwrap();

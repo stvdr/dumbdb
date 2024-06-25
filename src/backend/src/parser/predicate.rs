@@ -60,7 +60,7 @@ mod tests {
         let mut db = default_test_db(&td);
         create_default_tables(&mut db);
 
-        let tx = Arc::new(Mutex::new(db.create_transaction()));
+        let tx = Arc::new(Mutex::new(db.new_tx()));
         let metadata_manager = MetadataManager::new(&tx);
 
         let lhs1 = Expression::Field("sname".to_string());
@@ -75,7 +75,7 @@ mod tests {
         //let mut pred2 = Predicate::from_term(t2);
         //pred1.conjoin_with(&mut pred2);
 
-        let mut tx = Arc::new(Mutex::new(db.create_transaction()));
+        let mut tx = Arc::new(Mutex::new(db.new_tx()));
         let layout = metadata_manager.get_table_layout("student", &tx).unwrap();
         let mut scan = Box::new(TableScan::new(tx, layout, "student"));
 

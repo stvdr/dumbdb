@@ -107,7 +107,7 @@ mod tests {
         let mut parser = Parser::new(lexer);
         let ast = parser.parse().unwrap();
 
-        let tx = Arc::new(Mutex::new(db.create_transaction()));
+        let tx = Arc::new(Mutex::new(db.new_tx()));
         if let RootNode::Select(sel) = ast {
             let mut plan = planner.create_plan(&sel, tx).unwrap();
             let mut scan = plan.open();

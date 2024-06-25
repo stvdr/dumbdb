@@ -197,7 +197,7 @@ mod tests {
         let db = default_test_db(&td);
 
         // Create first table in the catalog
-        let tx = &Arc::new(Mutex::new(db.create_transaction()));
+        let tx = &Arc::new(Mutex::new(db.new_tx()));
         let tbl_manager = TableManager::new(tx);
         let mut schema_1 = Schema::new();
         schema_1.add_int_field("test_int");
@@ -207,7 +207,7 @@ mod tests {
         tx.lock().unwrap().commit();
 
         // Create second table in the catalog
-        let tx = &Arc::new(Mutex::new(db.create_transaction()));
+        let tx = &Arc::new(Mutex::new(db.new_tx()));
         let tbl_manager = TableManager::new(tx);
         let mut schema_2 = Schema::new();
         schema_2.add_int_field("test_int_2");
@@ -219,7 +219,7 @@ mod tests {
         tx.lock().unwrap().commit();
 
         // Verify existence of both tables
-        let tx = &Arc::new(Mutex::new(db.create_transaction()));
+        let tx = &Arc::new(Mutex::new(db.new_tx()));
         let actual_layout = tbl_manager
             .get_table_layout("test_table", tx)
             .expect("table does not exist");

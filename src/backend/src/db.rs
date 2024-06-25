@@ -57,7 +57,7 @@ impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
         }
     }
 
-    pub fn create_transaction(&self) -> Transaction<PAGE_SIZE> {
+    pub fn new_tx(&self) -> Transaction<PAGE_SIZE> {
         Transaction::new(
             self.file_manager(),
             self.log_manager(),
