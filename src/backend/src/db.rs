@@ -22,7 +22,7 @@ pub struct SimpleDB<const PAGE_SIZE: usize> {
     file_manager: Arc<FileManager<PAGE_SIZE>>,
     lock_table: Arc<LockTable>,
     log_manager: Arc<Mutex<LogManager<PAGE_SIZE>>>,
-    //metadata_manager: Arc<RwLock<MetadataManager>>,
+    metadata_manager: Arc<RwLock<MetadataManager>>,
 }
 
 impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
@@ -37,21 +37,23 @@ impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
         )));
         let lock_table = Arc::new(LockTable::new());
 
-        //let tx = Arc::new(Mutex::new(Transaction::new(
-        //    file_manager.clone(),
-        //    log_manager.clone(),
-        //    buffer_manager.clone(),
-        //    lock_table.clone(),
-        //)));
+        let tx = Arc::new(Mutex::new(Transaction::new(
+            file_manager.clone(),
+            log_manager.clone(),
+            buffer_manager.clone(),
+            lock_table.clone(),
+        )));
 
-        //let metadata_manager = Arc::new(RwLock::new(MetadataManager::new(&tx)));
+        let metadata_manager = Arc::new(RwLock::new(MetadataManager::new(&tx)));
+
+        tx.lock().unwrap().commit();
 
         Self {
             buffer_manager,
             file_manager,
             log_manager,
             lock_table,
-            //metadata_manager,
+            metadata_manager,
         }
     }
 
