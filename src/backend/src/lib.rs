@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod tests;
 
+mod block_id;
 mod buffer;
 mod buffer_list;
 mod buffer_manager;
@@ -18,6 +19,7 @@ mod layout;
 mod lock_table;
 mod log_manager;
 mod log_record;
+mod page;
 mod record_page;
 mod rid;
 mod schema;

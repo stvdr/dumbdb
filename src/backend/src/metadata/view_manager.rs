@@ -14,7 +14,7 @@ pub struct ViewManager {
 }
 
 impl ViewManager {
-    fn create_metadata<const P: usize>(&self, tx: &Arc<Mutex<Transaction<P>>>) {
+    fn create_metadata(&self, tx: &Arc<Mutex<Transaction>>) {
         if self.tbl_mgr.get_table_layout("viewcat", tx).is_some() {
             // If the metadata table already exists, we don't need to re-create it
             return;
@@ -30,7 +30,7 @@ impl ViewManager {
     /// not already exist.
     ///
     /// Note: This assumes that TableManager's metadata tables have already been created elsewhere.
-    pub fn new<const P: usize>(tx: &Arc<Mutex<Transaction<P>>>) -> Self {
+    pub fn new(tx: &Arc<Mutex<Transaction>>) -> Self {
         let s = Self {
             tbl_mgr: TableManager::new(tx),
         };
@@ -47,11 +47,11 @@ impl ViewManager {
     /// * `view_def` - The SQL definition of the view.
     /// * `tx` - The transaction where the view creation will run.
     // TODO: error checking
-    pub fn create_view<const P: usize>(
+    pub fn create_view(
         &self,
         view_name: &str,
         view_def: &str,
-        tx: &Arc<Mutex<Transaction<P>>>,
+        tx: &Arc<Mutex<Transaction>>,
     ) -> Result<(), String> {
         let layout = self
             .tbl_mgr
@@ -70,10 +70,10 @@ impl ViewManager {
     ///
     /// * `view_name` - The name of the view.
     /// * `tx` - The transaction to use when retrieving the view from the metadata tables.
-    pub fn get_view_definition<const P: usize>(
+    pub fn get_view_definition(
         &self,
         view_name: &str,
-        tx: &Arc<Mutex<Transaction<P>>>,
+        tx: &Arc<Mutex<Transaction>>,
     ) -> Option<String> {
         let layout = self.tbl_mgr.get_table_layout("viewcat", tx)?;
         let mut scan = TableScan::new(tx.clone(), layout, "viewcat");
@@ -98,7 +98,7 @@ impl ViewManager {
 mod tests {
     use tempfile::{tempdir, TempDir};
 
-    use crate::tests::test_utils::default_test_db;
+    use crate::tests::test_utils::test_db;
 
     use super::*;
 
@@ -106,7 +106,7 @@ mod tests {
     fn test_create_view() {
         let td = tempdir().unwrap();
 
-        let db = default_test_db(&td);
+        let db = test_db(&td);
 
         {
             let tx = &Arc::new(Mutex::new(db.new_tx()));

@@ -10,19 +10,19 @@ use super::{
     table_manager::{TableManager, MAX_NAME},
 };
 
-pub struct IndexInfo<const P: usize> {
+pub struct IndexInfo {
     name: String,
     field_name: String,
-    tx: Arc<Mutex<Transaction<P>>>,
+    tx: Arc<Mutex<Transaction>>,
     layout: Layout,
     stat_info: StatisticsInfo,
 }
 
-impl<const P: usize> IndexInfo<P> {
+impl IndexInfo {
     fn new(
         name: String,
         field_name: String,
-        tx: Arc<Mutex<Transaction<P>>>,
+        tx: Arc<Mutex<Transaction>>,
         layout: Layout,
         stat_info: StatisticsInfo,
     ) -> Self {
@@ -91,10 +91,7 @@ pub struct IndexManager {
 }
 
 impl IndexManager {
-    pub fn new<const P: usize>(
-        stats_mgr: Arc<Mutex<StatisticsManager>>,
-        tx: &Arc<Mutex<Transaction<P>>>,
-    ) -> Self {
+    pub fn new(stats_mgr: Arc<Mutex<StatisticsManager>>, tx: &Arc<Mutex<Transaction>>) -> Self {
         let mut schema = Schema::new();
         schema.add_string_field("indexname", MAX_NAME);
         schema.add_string_field("tablename", MAX_NAME);
@@ -109,12 +106,12 @@ impl IndexManager {
         s
     }
 
-    pub fn create_index<const P: usize>(
+    pub fn create_index(
         &self,
         idx_name: &str,
         tbl_name: &str,
         field_name: &str,
-        tx: Arc<Mutex<Transaction<P>>>,
+        tx: Arc<Mutex<Transaction>>,
     ) {
         // TODO: verify that index does not already exist
         let mut scan = TableScan::new(tx, self.layout.clone(), "idxcat");

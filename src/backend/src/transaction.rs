@@ -4,34 +4,29 @@ use std::sync::{
 };
 
 use crate::{
-    buffer::Buffer,
-    buffer_list::BufferList,
-    buffer_manager::BufferManager,
-    concurrency_manager::ConcurrencyManager,
-    eviction_policy::SimpleEvictionPolicy,
-    file_manager::{BlockId, FileManager, Page, ReadTypeFromPage},
-    lock_table::LockTable,
-    log_manager::LogManager,
-    log_record::LogRecord,
+    block_id::BlockId, buffer::Buffer, buffer_list::BufferList, buffer_manager::BufferManager,
+    concurrency_manager::ConcurrencyManager, eviction_policy::SimpleEvictionPolicy,
+    file_manager::FileManager, lock_table::LockTable, log_manager::LogManager,
+    log_record::LogRecord, page::Page,
 };
 
 static NEXT_TRANSACTION_NUM: AtomicI64 = AtomicI64::new(0);
 static END_OF_FILE: u64 = std::u64::MAX;
 
-pub struct Transaction<const P: usize> {
+pub struct Transaction {
     concurrency_mgr: ConcurrencyManager,
-    buffer_mgr: Arc<Mutex<BufferManager<P, SimpleEvictionPolicy>>>,
-    log_mgr: Arc<Mutex<LogManager<P>>>,
-    file_mgr: Arc<FileManager<P>>,
+    buffer_mgr: Arc<Mutex<BufferManager<SimpleEvictionPolicy>>>,
+    log_mgr: Arc<Mutex<LogManager>>,
+    file_mgr: Arc<FileManager>,
     tx_num: i64,
-    buffer_list: Arc<Mutex<BufferList<P>>>,
+    buffer_list: Arc<Mutex<BufferList>>,
 }
 
-impl<const P: usize> Transaction<P> {
+impl Transaction {
     pub fn new(
-        file_mgr: Arc<FileManager<P>>,
-        log_mgr: Arc<Mutex<LogManager<P>>>,
-        buffer_mgr: Arc<Mutex<BufferManager<P, SimpleEvictionPolicy>>>,
+        file_mgr: Arc<FileManager>,
+        log_mgr: Arc<Mutex<LogManager>>,
+        buffer_mgr: Arc<Mutex<BufferManager<SimpleEvictionPolicy>>>,
         lock_tbl: Arc<LockTable>,
     ) -> Self {
         // TODO: verify the atomic ordering
@@ -259,7 +254,7 @@ impl<const P: usize> Transaction<P> {
     /// * `offset` - The offset in the buffer's page.
     /// * `new_val` - The new value to be written.
     // TODO: why is `new_val` provided to this method?
-    fn log_set_int(&mut self, buf: &mut Buffer<P>, offset: usize, new_val: i32) -> i64 {
+    fn log_set_int(&mut self, buf: &mut Buffer, offset: usize, new_val: i32) -> i64 {
         let old_val: i32 = buf.page.read(offset);
 
         // TODO: error handling
@@ -285,7 +280,7 @@ impl<const P: usize> Transaction<P> {
     /// * `offset` - The offset in the buffer's page.
     /// * `new_val` - The new value being written.
     // TODO: why is `new_val` provided to this method?
-    fn log_set_string(&mut self, buf: &mut Buffer<P>, offset: usize, new_val: &str) -> i64 {
+    fn log_set_string(&mut self, buf: &mut Buffer, offset: usize, new_val: &str) -> i64 {
         let old_val: String = buf.page.read(offset);
 
         // TODO: error handling
@@ -311,7 +306,7 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use crate::{buffer_manager, eviction_policy::SimpleEvictionPolicy};
+    use crate::{buffer_manager, eviction_policy::SimpleEvictionPolicy, page::Page};
 
     use super::*;
 
@@ -323,7 +318,7 @@ mod tests {
         let log_dir = td.path().join("log");
         fs::create_dir_all(&log_dir).unwrap();
 
-        let lm = Arc::new(Mutex::new(LogManager::<4096>::new(&log_dir)));
+        let lm = Arc::new(Mutex::new(LogManager::new(&log_dir)));
         let fm = Arc::new(FileManager::new(&data_dir));
         let bm = Arc::new(Mutex::new(BufferManager::new(
             10,
@@ -407,7 +402,7 @@ mod tests {
         let log_dir = td.path().join("log");
         fs::create_dir_all(&log_dir).unwrap();
 
-        let lm = Arc::new(Mutex::new(LogManager::<4096>::new(&log_dir)));
+        let lm = Arc::new(Mutex::new(LogManager::new(&log_dir)));
         let fm = Arc::new(FileManager::new(&data_dir));
         let bm = Arc::new(Mutex::new(BufferManager::new(
             10,

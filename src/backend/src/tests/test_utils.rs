@@ -11,10 +11,8 @@ use crate::{
     table_scan::TableScan,
 };
 
-const DEFAULT_BLOCK_SIZE: usize = 4096;
-
 /// Get a `SimpleDB` with log and data storage written into temporary directories.
-pub fn test_db<const PAGE_SIZE: usize>(td: &TempDir) -> SimpleDB<PAGE_SIZE> {
+pub fn test_db(td: &TempDir) -> SimpleDB {
     let data_dir = td.path().join("data");
     fs::create_dir_all(&data_dir).unwrap();
     let log_dir = td.path().join("log");
@@ -23,12 +21,13 @@ pub fn test_db<const PAGE_SIZE: usize>(td: &TempDir) -> SimpleDB<PAGE_SIZE> {
     SimpleDB::new(&data_dir, &log_dir, 1024)
 }
 
-pub fn default_test_db(td: &TempDir) -> SimpleDB<DEFAULT_BLOCK_SIZE> {
+// TODO: can be removed
+pub fn default_test_db(td: &TempDir) -> SimpleDB {
     test_db(td)
 }
 
 /// Create a set of default tables that can be used in unit tests.
-pub fn create_default_tables<const PAGE_SIZE: usize>(db: &mut SimpleDB<PAGE_SIZE>) {
+pub fn create_default_tables(db: &mut SimpleDB) {
     let tx = Arc::new(Mutex::new(db.new_tx()));
 
     let student_schema = make_schema! {

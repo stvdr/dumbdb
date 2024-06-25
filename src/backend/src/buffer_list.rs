@@ -4,19 +4,19 @@ use std::{
 };
 
 use crate::{
-    buffer::Buffer, buffer_manager::BufferManager, eviction_policy::SimpleEvictionPolicy,
-    file_manager::BlockId,
+    block_id::BlockId, buffer::Buffer, buffer_manager::BufferManager,
+    eviction_policy::SimpleEvictionPolicy,
 };
 
 /// A mapping of Blocks to the buffers that are loaded into them.
-pub struct BufferList<const P: usize> {
-    buffers: HashMap<BlockId, Arc<RwLock<Buffer<P>>>>,
+pub struct BufferList {
+    buffers: HashMap<BlockId, Arc<RwLock<Buffer>>>,
     pins: Vec<BlockId>,
-    buf_mgr: Arc<Mutex<BufferManager<P, SimpleEvictionPolicy>>>,
+    buf_mgr: Arc<Mutex<BufferManager<SimpleEvictionPolicy>>>,
 }
 
-impl<const P: usize> BufferList<P> {
-    pub fn new(buf_mgr: Arc<Mutex<BufferManager<P, SimpleEvictionPolicy>>>) -> Self {
+impl BufferList {
+    pub fn new(buf_mgr: Arc<Mutex<BufferManager<SimpleEvictionPolicy>>>) -> Self {
         Self {
             buffers: HashMap::new(),
             pins: Vec::new(),
@@ -25,7 +25,7 @@ impl<const P: usize> BufferList<P> {
     }
 
     /// Get the buffer associated with the specified BlockId.
-    pub fn get_buffer(&self, blk: &BlockId) -> Arc<RwLock<Buffer<P>>> {
+    pub fn get_buffer(&self, blk: &BlockId) -> Arc<RwLock<Buffer>> {
         // TODO: error handling, can ultimately use `cloned` here?
         let buf = self
             .buffers

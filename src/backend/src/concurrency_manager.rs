@@ -1,7 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::file_manager::BlockId;
-use crate::lock_table::LockTable;
+use crate::{block_id::BlockId, lock_table::LockTable};
 
 /// Manages locks for a single Transaction.
 pub struct ConcurrencyManager {

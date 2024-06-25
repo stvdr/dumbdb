@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use log::Record;
 
 use crate::{
-    file_manager::BlockId,
+    block_id::BlockId,
     layout::Layout,
     parser::constant::Value,
     record_page::RecordPage,
@@ -12,10 +12,10 @@ use crate::{
     transaction::Transaction,
 };
 
-pub struct TableScan<const P: usize> {
-    tx: Arc<Mutex<Transaction<P>>>,
+pub struct TableScan {
+    tx: Arc<Mutex<Transaction>>,
     layout: Layout,
-    record_page: RecordPage<P>,
+    record_page: RecordPage,
     file_name: String,
     current_slot: i16,
     is_closed: bool,
@@ -52,7 +52,7 @@ impl FromDynamic for String {
     }
 }
 
-impl<const P: usize> Scan for TableScan<P> {
+impl Scan for TableScan {
     /// Move to the next record.
     ///
     /// Iterate through all records in a table. Each call to `next` will find the next slot with a
@@ -174,8 +174,8 @@ impl<const P: usize> Scan for TableScan<P> {
     }
 }
 
-impl<const P: usize> TableScan<P> {
-    pub fn new(tx: Arc<Mutex<Transaction<P>>>, layout: Layout, file_name: &str) -> Self {
+impl TableScan {
+    pub fn new(tx: Arc<Mutex<Transaction>>, layout: Layout, file_name: &str) -> Self {
         let blk = {
             let mut ltx = tx.lock().unwrap();
             if ltx.size(file_name) == 0 {
@@ -219,13 +219,13 @@ impl<const P: usize> TableScan<P> {
     }
 }
 
-impl<const P: usize> Drop for TableScan<P> {
+impl Drop for TableScan {
     fn drop(&mut self) {
         self.close();
     }
 }
 
-impl<const P: usize> SetDynamic for TableScan<P> {
+impl SetDynamic for TableScan {
     fn set_dynamic(&mut self, field: &str, value: &dyn FromDynamic) {
         if let Some(val) = value.as_int() {
             self.set_int(field, val);
@@ -284,7 +284,7 @@ mod tests {
         let log_dir = td.path().join("log");
         fs::create_dir_all(&log_dir).unwrap();
 
-        let lm = Arc::new(Mutex::new(LogManager::<4096>::new(&log_dir)));
+        let lm = Arc::new(Mutex::new(LogManager::new(&log_dir)));
         let fm = Arc::new(FileManager::new(&data_dir));
         let bm = Arc::new(Mutex::new(BufferManager::new(
             10,

@@ -14,18 +14,17 @@ use crate::{
     transaction::Transaction,
 };
 
-const DEFAULT_BLOCK_SIZE: usize = 4096;
 const DEFAULT_BUFFER_SIZE: usize = 1024;
 
-pub struct SimpleDB<const PAGE_SIZE: usize> {
-    buffer_manager: Arc<Mutex<BufferManager<PAGE_SIZE, SimpleEvictionPolicy>>>,
-    file_manager: Arc<FileManager<PAGE_SIZE>>,
+pub struct SimpleDB {
+    buffer_manager: Arc<Mutex<BufferManager<SimpleEvictionPolicy>>>,
+    file_manager: Arc<FileManager>,
     lock_table: Arc<LockTable>,
-    log_manager: Arc<Mutex<LogManager<PAGE_SIZE>>>,
+    log_manager: Arc<Mutex<LogManager>>,
     metadata_manager: Arc<RwLock<MetadataManager>>,
 }
 
-impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
+impl SimpleDB {
     pub fn new(data_dir: &Path, log_dir: &Path, num_bufs: usize) -> Self {
         let file_manager = Arc::new(FileManager::new(data_dir));
         let log_manager = Arc::new(Mutex::new(LogManager::new(log_dir)));
@@ -57,7 +56,7 @@ impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
         }
     }
 
-    pub fn new_tx(&self) -> Transaction<PAGE_SIZE> {
+    pub fn new_tx(&self) -> Transaction {
         Transaction::new(
             self.file_manager(),
             self.log_manager(),
@@ -66,11 +65,11 @@ impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
         )
     }
 
-    pub fn buffer_manager(&self) -> Arc<Mutex<BufferManager<PAGE_SIZE>>> {
+    pub fn buffer_manager(&self) -> Arc<Mutex<BufferManager>> {
         self.buffer_manager.clone()
     }
 
-    pub fn file_manager(&self) -> Arc<FileManager<PAGE_SIZE>> {
+    pub fn file_manager(&self) -> Arc<FileManager> {
         self.file_manager.clone()
     }
 
@@ -78,7 +77,7 @@ impl<const PAGE_SIZE: usize> SimpleDB<PAGE_SIZE> {
         self.lock_table.clone()
     }
 
-    pub fn log_manager(&self) -> Arc<Mutex<LogManager<PAGE_SIZE>>> {
+    pub fn log_manager(&self) -> Arc<Mutex<LogManager>> {
         self.log_manager.clone()
     }
 

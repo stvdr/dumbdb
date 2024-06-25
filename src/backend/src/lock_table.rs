@@ -5,7 +5,7 @@ use std::{
 
 use backtrace::Backtrace;
 
-use crate::file_manager::BlockId;
+use crate::block_id::BlockId;
 
 static MAX_TIME_MS: u32 = 10000;
 
@@ -155,7 +155,7 @@ mod tests {
         thread,
     };
 
-    use crate::file_manager::BlockId;
+    use crate::block_id::BlockId;
 
     use super::LockTable;
 

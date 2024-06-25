@@ -1,11 +1,12 @@
-use crate::file_manager::{BlockId, FileManager, Page};
+use crate::block_id::BlockId;
+use crate::file_manager::FileManager;
+use crate::page::{Page, PAGE_SIZE};
 use std::mem::size_of;
 use std::path::Path;
 use std::sync::Arc;
-
 const LOG_NAME: &str = "log";
 
-type LogPage<const P: usize> = Page<P>;
+type LogPage = Page;
 type Frontier = u32;
 type RecordLength = u32;
 
@@ -15,20 +16,20 @@ const FRONTIER_POS: usize = 0;
 // The initial value of the frontier
 const FRONTIER_START: usize = size_of::<Frontier>();
 
-pub struct LogManager<const P: usize> {
-    file_manager: Arc<FileManager<P>>,
-    page: LogPage<P>,
+pub struct LogManager {
+    file_manager: Arc<FileManager>,
+    page: LogPage,
     block_num: u64,
     latest_lsn: i64,
     last_saved_lsn: i64,
 }
 
-trait ImplLogPage<const P: usize> {
+trait ImplLogPage {
     fn get_frontier(&self) -> u32;
     fn set_frontier(&mut self, f: u32);
 }
 
-impl<const P: usize> ImplLogPage<P> for LogPage<P> {
+impl ImplLogPage for LogPage {
     fn get_frontier(&self) -> u32 {
         self.read::<u32>(FRONTIER_POS)
     }
@@ -39,7 +40,7 @@ impl<const P: usize> ImplLogPage<P> for LogPage<P> {
 }
 
 // TODO: error handling
-impl<const P: usize> LogManager<P> {
+impl LogManager {
     pub fn new(root_directory: &Path) -> Self {
         let file_manager = Arc::new(FileManager::new(root_directory));
 
@@ -89,11 +90,14 @@ impl<const P: usize> LogManager<P> {
         // If the record will fit in the existing page, place it there and update the frontier
         // Otherwise, create a new block
         let len = record.len() as u64;
-        assert!(len < P as u64, "record does not fit in a single page!");
+        assert!(
+            len < PAGE_SIZE as u64,
+            "record does not fit in a single page!"
+        );
 
         let mut frontier = self.page.get_frontier();
 
-        if frontier as u64 + len + size_of::<RecordLength>() as u64 >= P as u64 {
+        if frontier as u64 + len + size_of::<RecordLength>() as u64 >= PAGE_SIZE as u64 {
             // the record won't fit in the existing page, append a new block
             self.flush_all();
             self.append_block();
@@ -129,7 +133,7 @@ impl<const P: usize> LogManager<P> {
     /// Gets a snapshot of the log that can be iterated over.
     ///
     /// Creating a snapshot will cause the log to be flushed.
-    pub fn snapshot(&mut self) -> LogManagerSnapshot<P> {
+    pub fn snapshot(&mut self) -> LogManagerSnapshot {
         self.flush_all();
 
         // TODO: block_num should prob not be a usize?
@@ -147,15 +151,15 @@ impl<const P: usize> LogManager<P> {
 }
 
 #[derive(Debug)]
-pub struct LogManagerSnapshot<const P: usize> {
-    file_manager: Arc<FileManager<P>>,
+pub struct LogManagerSnapshot {
+    file_manager: Arc<FileManager>,
     block: BlockId,
-    page: LogPage<P>,
+    page: LogPage,
     current_pos: u32,
 }
 
 // TODO: error handling
-impl<const P: usize> Iterator for LogManagerSnapshot<P> {
+impl Iterator for LogManagerSnapshot {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -195,7 +199,7 @@ mod tests {
         let root_dir = td.path().join("data");
         fs::create_dir_all(&root_dir).expect("Failed to create root directory");
         {
-            let mut lm = LogManager::<4096>::new(&root_dir);
+            let mut lm = LogManager::new(&root_dir);
 
             assert_eq!(lm.block_num, 0);
 
@@ -217,7 +221,7 @@ mod tests {
             lm.flush(1000);
         }
 
-        let mut lm = LogManager::<4096>::new(&root_dir);
+        let mut lm = LogManager::new(&root_dir);
         let snapshot = lm.snapshot();
         let mut i = 999;
         for r in snapshot {
@@ -233,7 +237,7 @@ mod tests {
         let td = tempdir().unwrap();
         let root_dir = td.path().join("data");
         fs::create_dir_all(&root_dir).expect("Failed to create root directory");
-        let mut lm = LogManager::<4096>::new(&root_dir);
+        let mut lm = LogManager::new(&root_dir);
 
         assert_eq!(lm.block_num, 0);
 

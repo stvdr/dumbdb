@@ -42,7 +42,7 @@ pub struct StatisticsManager {
 }
 
 impl StatisticsManager {
-    pub fn new<const P: usize>(tx: &Arc<Mutex<Transaction<P>>>) -> Self {
+    pub fn new(tx: &Arc<Mutex<Transaction>>) -> Self {
         let mut s = Self {
             tbl_mgr: TableManager::new(tx),
             tbl_stats: Arc::new(Mutex::new(HashMap::new())),
@@ -54,11 +54,11 @@ impl StatisticsManager {
         s
     }
 
-    pub fn get_stats<const P: usize>(
+    pub fn get_stats(
         &mut self,
         tbl_name: &str,
         layout: &Layout,
-        tx: &Arc<Mutex<Transaction<P>>>,
+        tx: &Arc<Mutex<Transaction>>,
     ) -> Option<StatisticsInfo> {
         self.num_calls += 1;
 
@@ -73,7 +73,7 @@ impl StatisticsManager {
         Some(stats.clone())
     }
 
-    fn refresh_stats<const P: usize>(&mut self, tx: &Arc<Mutex<Transaction<P>>>) {
+    fn refresh_stats(&mut self, tx: &Arc<Mutex<Transaction>>) {
         let mut new_stats = HashMap::new();
         self.num_calls = 0;
         let tcat_layout = self
@@ -96,11 +96,11 @@ impl StatisticsManager {
         self.tbl_stats = Arc::new(Mutex::new(new_stats));
     }
 
-    fn calculate_stats<const P: usize>(
+    fn calculate_stats(
         &self,
         tbl_name: &str,
         layout: &Layout,
-        tx: &Arc<Mutex<Transaction<P>>>,
+        tx: &Arc<Mutex<Transaction>>,
     ) -> StatisticsInfo {
         let mut num_records = 0;
         let mut num_blocks = 0;

@@ -14,16 +14,16 @@ use crate::{
 
 use super::plan::Plan;
 
-pub struct TablePlan<const P: usize> {
-    tx: Arc<Mutex<Transaction<P>>>,
+pub struct TablePlan {
+    tx: Arc<Mutex<Transaction>>,
     tbl_name: String,
     layout: Layout,
     stat_info: StatisticsInfo,
 }
 
-impl<const P: usize> TablePlan<P> {
+impl TablePlan {
     pub fn new(
-        tx: Arc<Mutex<Transaction<P>>>,
+        tx: Arc<Mutex<Transaction>>,
         tbl_name: &str,
         meta_mgr: &mut MetadataManager,
     ) -> Self {
@@ -45,7 +45,7 @@ impl<const P: usize> TablePlan<P> {
     }
 }
 
-impl<const P: usize> Plan for TablePlan<P> {
+impl Plan for TablePlan {
     fn open(&mut self) -> Box<dyn Scan> {
         Box::new(TableScan::new(
             self.tx.clone(),
@@ -71,7 +71,7 @@ impl<const P: usize> Plan for TablePlan<P> {
     }
 }
 
-impl<const P: usize> Display for TablePlan<P> {
+impl Display for TablePlan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }

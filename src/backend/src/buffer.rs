@@ -1,22 +1,19 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{
-    file_manager::{BlockId, FileManager, Page},
-    log_manager::LogManager,
-};
+use crate::{block_id::BlockId, file_manager::FileManager, log_manager::LogManager, page::Page};
 
-pub struct Buffer<const P: usize> {
-    file_manager: Arc<FileManager<P>>,
-    log_manager: Arc<Mutex<LogManager<P>>>,
-    pub page: Page<P>,
+pub struct Buffer {
+    file_manager: Arc<FileManager>,
+    log_manager: Arc<Mutex<LogManager>>,
+    pub page: Page,
     pub blk: Option<BlockId>,
     pub pin_count: u32,
     pub tx_num: i64,
     pub lsn: i64,
 }
 
-impl<const P: usize> Buffer<P> {
-    pub fn new(file_manager: Arc<FileManager<P>>, log_manager: Arc<Mutex<LogManager<P>>>) -> Self {
+impl Buffer {
+    pub fn new(file_manager: Arc<FileManager>, log_manager: Arc<Mutex<LogManager>>) -> Self {
         Self {
             file_manager,
             log_manager,

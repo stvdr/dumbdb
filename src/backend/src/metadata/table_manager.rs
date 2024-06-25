@@ -41,7 +41,7 @@ impl TableManager {
     /// # Arguments
     ///
     /// * `tx` - The transaction to use when creating the backing metadata tables.
-    pub fn new<const P: usize>(tx: &Arc<Mutex<Transaction<P>>>) -> Self {
+    pub fn new(tx: &Arc<Mutex<Transaction>>) -> Self {
         let (tcat_layout, fcat_layout) = Self::create_layouts();
         let mut sel = Self {
             tcat_layout,
@@ -61,11 +61,11 @@ impl TableManager {
     /// * `tbl_name` - The name of the table.
     /// * `schema` - The schema of the table.
     /// * `tx` - The transaction to use when inserting into the metadata tables.
-    pub fn create_table<const P: usize>(
+    pub fn create_table(
         &self,
         tbl_name: &str,
         schema: &Schema,
-        tx: &Arc<Mutex<Transaction<P>>>,
+        tx: &Arc<Mutex<Transaction>>,
     ) -> bool {
         let new_tbl_layout = Layout::from_schema(schema.clone());
 
@@ -117,11 +117,7 @@ impl TableManager {
     ///
     /// * `tbl_name` - The name of the table that already exists.
     /// * `tx` - The transaction to use when reading from the metadata tables.
-    pub fn get_table_layout<const P: usize>(
-        &self,
-        tbl_name: &str,
-        tx: &Arc<Mutex<Transaction<P>>>,
-    ) -> Option<Layout> {
+    pub fn get_table_layout(&self, tbl_name: &str, tx: &Arc<Mutex<Transaction>>) -> Option<Layout> {
         let mut schema = Schema::new();
         let mut slot_size = None;
         {
@@ -186,7 +182,7 @@ impl TableManager {
 mod tests {
     use tempfile::tempdir;
 
-    use crate::tests::test_utils::default_test_db;
+    use crate::tests::test_utils::test_db;
 
     use super::*;
 
@@ -194,7 +190,7 @@ mod tests {
     fn test_create_table() {
         let td = tempdir().unwrap();
 
-        let db = default_test_db(&td);
+        let db = test_db(&td);
 
         // Create first table in the catalog
         let tx = &Arc::new(Mutex::new(db.new_tx()));

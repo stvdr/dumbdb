@@ -1,22 +1,23 @@
 use crate::{
+    block_id::BlockId,
     buffer::Buffer,
     eviction_policy::{EvictionPolicy, SimpleEvictionPolicy},
-    file_manager::{BlockId, FileManager, Page},
+    file_manager::FileManager,
     log_manager::LogManager,
 };
 use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use std::collections::HashMap;
 
-pub struct BufferManager<const P: usize, E: EvictionPolicy = SimpleEvictionPolicy> {
+pub struct BufferManager<E: EvictionPolicy = SimpleEvictionPolicy> {
     unused: Vec<usize>,
     blk_to_buf: HashMap<BlockId, usize>,
-    buffers: Vec<Arc<RwLock<Buffer<P>>>>,
+    buffers: Vec<Arc<RwLock<Buffer>>>,
     num_available: usize,
     eviction_policy: E,
 }
 
-impl<const P: usize, E: EvictionPolicy> BufferManager<P, E> {
+impl<E: EvictionPolicy> BufferManager<E> {
     /// Creates a new BufferManager.
     ///
     /// # Arguments
@@ -29,8 +30,8 @@ impl<const P: usize, E: EvictionPolicy> BufferManager<P, E> {
     /// from the pool.
     pub fn new(
         size: usize,
-        file_manager: Arc<FileManager<P>>,
-        log_manager: Arc<Mutex<LogManager<P>>>,
+        file_manager: Arc<FileManager>,
+        log_manager: Arc<Mutex<LogManager>>,
         eviction_policy: E,
     ) -> Self {
         Self {
@@ -61,7 +62,7 @@ impl<const P: usize, E: EvictionPolicy> BufferManager<P, E> {
     }
 
     // TODO: Error Checking
-    pub fn pin(&mut self, blk: &BlockId) -> Arc<RwLock<Buffer<P>>> {
+    pub fn pin(&mut self, blk: &BlockId) -> Arc<RwLock<Buffer>> {
         let buf_index = match self.blk_to_buf.get(&blk) {
             Some(buf_index) => {
                 log::trace!(
@@ -144,7 +145,7 @@ impl<const P: usize, E: EvictionPolicy> BufferManager<P, E> {
     /// # Arguments
     ///
     /// * `buffer` - The buffer to unpin.
-    pub fn unpin(&mut self, buffer: &Arc<RwLock<Buffer<P>>>) {
+    pub fn unpin(&mut self, buffer: &Arc<RwLock<Buffer>>) {
         let mut buffer = buffer.write().unwrap();
         self.unpin_locked(&mut buffer);
     }
@@ -155,7 +156,7 @@ impl<const P: usize, E: EvictionPolicy> BufferManager<P, E> {
     /// # Arguments
     ///
     /// * `buffer` - A mutable reference to a Buffer.
-    pub fn unpin_locked(&mut self, buffer: &mut Buffer<P>) {
+    pub fn unpin_locked(&mut self, buffer: &mut Buffer) {
         buffer.unpin();
         if !buffer.is_pinned() {
             let b = buffer.blk.as_ref().unwrap();
@@ -191,9 +192,8 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        eviction_policy::SimpleEvictionPolicy,
-        file_manager::{BlockId, FileManager, Page},
-        log_manager::LogManager,
+        block_id::BlockId, eviction_policy::SimpleEvictionPolicy, file_manager::FileManager,
+        log_manager::LogManager, page::Page,
     };
 
     use super::BufferManager;
@@ -207,7 +207,7 @@ mod tests {
         fs::create_dir_all(&log_dir).expect("Failed to create root directory");
 
         let lm = LogManager::new(&log_dir);
-        let fm = FileManager::<128>::new(&data_dir);
+        let fm = FileManager::new(&data_dir);
         let mut bm = BufferManager::new(
             3,
             Arc::new(fm),
@@ -250,7 +250,7 @@ mod tests {
         let log_dir = td.path().join("log");
         fs::create_dir_all(&log_dir).expect("Failed to create root directory");
 
-        let lm = LogManager::<4096>::new(&log_dir);
+        let lm = LogManager::new(&log_dir);
         let fm = Arc::new(FileManager::new(&data_dir));
         let bm = Arc::new(Mutex::new(BufferManager::new(
             1,
