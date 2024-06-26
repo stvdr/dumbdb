@@ -1,5 +1,6 @@
 use std::{
     iter::Peekable,
+    slice::SliceIndex,
     str::{CharIndices, Chars},
 };
 
@@ -31,6 +32,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    pub fn source(&self) -> &str {
+        self.text
+    }
+
     fn advance(&mut self) -> Option<char> {
         let (pos, ch) = self.iter.next()?;
         self.cur = pos + 1;
@@ -41,8 +46,8 @@ impl<'a> Lexer<'a> {
         self.iter.peek().map(|(_, c)| c).copied()
     }
 
-    fn get_window(&self) -> String {
-        unsafe { self.text.get_unchecked(self.start..self.cur).to_string() }
+    fn get_window(&self, start: usize, end: usize) -> String {
+        unsafe { self.text.get_unchecked(start..end).to_string() }
     }
 
     fn scan_comment(&mut self) -> LexerResult {
@@ -88,10 +93,13 @@ impl<'a> Lexer<'a> {
         }
 
         // advance past the last `'` char
-        self.advance()
-            .ok_or(LexerError::UnterminatedVarchar(self.get_window()))?;
+        self.advance().ok_or(LexerError::UnterminatedVarchar(
+            self.get_window(self.start, self.cur),
+        ))?;
 
-        Ok(Token::VarcharConst(self.get_window()))
+        Ok(Token::VarcharConst(
+            self.get_window(self.start + 1, self.cur - 1),
+        ))
     }
 
     fn scan_identifier(&mut self) -> LexerResult {
@@ -101,7 +109,7 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
 
-        let val = self.get_window();
+        let val = self.get_window(self.start, self.cur);
 
         // TODO: less repetition?
         let token = match val.to_lowercase().as_str() {
@@ -205,10 +213,11 @@ mod tests {
         lexer_integer_3: "1234, 5678" => vec![Ok(Token::IntegerConst(1234)), Ok(Token::Comma), Ok(Token::IntegerConst(5678))],
         lexer_integer_4: "1234 , 5678" => vec![Ok(Token::IntegerConst(1234)), Ok(Token::Comma), Ok(Token::IntegerConst(5678))],
 
-        lexer_varchar_1: "'hello'" => vec![Ok(Token::VarcharConst("'hello'".to_string()))],
-        lexer_varchar_2: "123'hello'456" => vec![Ok(Token::IntegerConst(123)), Ok(Token::VarcharConst("'hello'".to_string())), Ok(Token::IntegerConst(456))],
-        lexer_varchar_3: "123 'hello' 456" => vec![Ok(Token::IntegerConst(123)), Ok(Token::VarcharConst("'hello'".to_string())), Ok(Token::IntegerConst(456))],
+        lexer_varchar_1: "'hello'" => vec![Ok(Token::VarcharConst("hello".to_string()))],
+        lexer_varchar_2: "123'hello'456" => vec![Ok(Token::IntegerConst(123)), Ok(Token::VarcharConst("hello".to_string())), Ok(Token::IntegerConst(456))],
+        lexer_varchar_3: "123 'hello' 456" => vec![Ok(Token::IntegerConst(123)), Ok(Token::VarcharConst("hello".to_string())), Ok(Token::IntegerConst(456))],
         lexer_varchar_4: "'abc" => vec![Err(LexerError::UnterminatedVarchar("'abc".to_string()))],
+        lexer_varchar_5: "''" => vec![Ok(Token::VarcharConst("".to_string()))],
 
         lexer_query_1: "SELECT a FROM x, z WHERE b = 3 AND c = 'hello';" => vec![
             Ok(Token::Select),
@@ -224,14 +233,14 @@ mod tests {
             Ok(Token::And),
             Ok(Token::Identifier("c".to_string())),
             Ok(Token::Equal),
-            Ok(Token::VarcharConst("'hello'".to_string())),
+            Ok(Token::VarcharConst("hello".to_string())),
             Ok(Token::SemiColon),
         ],
 
         lexer_predicate_1: "Dname = 'math' AND GradYear = SName" => vec![
             Ok(Token::Identifier("Dname".to_string())),
             Ok(Token::Equal),
-            Ok(Token::VarcharConst("'math'".to_string())),
+            Ok(Token::VarcharConst("math".to_string())),
             Ok(Token::And),
             Ok(Token::Identifier("GradYear".to_string())),
             Ok(Token::Equal),

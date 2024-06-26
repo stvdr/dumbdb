@@ -21,37 +21,6 @@ pub struct TableScan {
     is_closed: bool,
 }
 
-pub trait SetDynamic {
-    fn set_dynamic(&mut self, field: &str, value: &dyn FromDynamic);
-}
-
-pub trait FromDynamic {
-    fn as_int(&self) -> Option<i32> {
-        None
-    }
-    fn as_string(&self) -> Option<&str> {
-        None
-    }
-}
-
-impl FromDynamic for i32 {
-    fn as_int(&self) -> Option<i32> {
-        Some(*self)
-    }
-}
-
-impl FromDynamic for &str {
-    fn as_string(&self) -> Option<&str> {
-        Some(self)
-    }
-}
-
-impl FromDynamic for String {
-    fn as_string(&self) -> Option<&str> {
-        Some(self)
-    }
-}
-
 impl Scan for TableScan {
     /// Move to the next record.
     ///
@@ -115,9 +84,9 @@ impl Scan for TableScan {
         Ok(())
     }
 
-    fn set_val(&mut self, field_name: &str, val: Value) -> ScanResult<()> {
+    fn set_val(&mut self, field_name: &str, val: &Value) -> ScanResult<()> {
         //self.record_page.set
-        match &val {
+        match val {
             Value::Int(i) => self.record_page.set_int(self.current_slot, field_name, *i),
             Value::Varchar(s) => self
                 .record_page
@@ -225,30 +194,20 @@ impl Drop for TableScan {
     }
 }
 
-impl SetDynamic for TableScan {
-    fn set_dynamic(&mut self, field: &str, value: &dyn FromDynamic) {
-        if let Some(val) = value.as_int() {
-            self.set_int(field, val);
-        } else if let Some(val) = value.as_string() {
-            self.set_string(field, val);
-        } else {
-            panic!("Unsupported value type");
-        }
-    }
-}
-
 #[macro_export]
 macro_rules! insert {
     ($scan:expr, $( ($($val:expr),*) ),*) => {{
         use crate::scan::scan::{Scan};
-        use crate::table_scan::{SetDynamic, FromDynamic};
+        use crate::parser::constant::{FromDynamic};
+
         let fields = $scan.get_layout().schema().fields();
         $scan.before_first();
         $(
             $scan.insert();
             let mut index = 0;
             $(
-                $scan.set_dynamic(&fields[index], &$val);
+                let val: &dyn FromDynamic = &$val;
+                $scan.set_val(&fields[index], &val.as_val());
                 index += 1;
             )*
         )*
@@ -256,8 +215,36 @@ macro_rules! insert {
     }};
 }
 
+#[macro_export]
+macro_rules! assert_scan_results {
+        ($scan:expr, $( ($($val:expr),*) ),*) => {{
+            use crate::scan::scan::{Scan};
+        use crate::parser::constant::{FromDynamic};
+
+            let fields = $scan.get_layout().schema().fields();
+            $scan.before_first();
+            $(
+                assert!($scan.next(), "Failed to navigate to the first record in the scan");
+                let mut index = 0;
+                $(
+                    let expected_val: &dyn FromDynamic = &$val;
+                    let expected_val = expected_val.as_val();
+
+                    if let Ok(actual_val) = $scan.get_val(&fields[index]) {
+                        assert_eq!(actual_val, expected_val, "field '{}' not equal", &fields[index]);
+                    } else {
+                        panic!("Failed to get value for field {}", fields[index])
+                    }
+                    index += 1;
+                )*
+            )*
+            assert!(!$scan.next(), "Failed to reach end of scan");
+        }};
+    }
+
 #[cfg(test)]
 mod tests {
+
     use std::{fs, sync::mpsc, thread};
 
     use tempfile::tempdir;

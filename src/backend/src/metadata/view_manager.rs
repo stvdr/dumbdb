@@ -55,7 +55,12 @@ impl ViewManager {
         let layout = self
             .tbl_mgr
             .get_table_layout("viewcat", tx)
-            .ok_or("view does not exist")?;
+            .ok_or("viewcat metadata table does not exist")?;
+
+        if self.get_view_definition(view_name, tx).is_some() {
+            return Err(format!("view with name '{}' already exists", view_name));
+        }
+
         let mut scan = TableScan::new(tx.clone(), layout, "viewcat");
         scan.insert();
         scan.set_string("viewname", view_name);
@@ -115,6 +120,10 @@ mod tests {
             view_manager
                 .create_view("view_test_2", "SELECT * FROM test_table_2;", tx)
                 .expect("view_test_2 not found");
+
+            assert!(view_manager
+                .create_view("view_test_2", "SELECT * FROM test_table_3;", tx)
+                .is_err());
 
             tx.lock().unwrap().commit();
         }

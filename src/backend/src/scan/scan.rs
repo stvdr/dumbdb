@@ -29,7 +29,7 @@ pub trait Scan {
         Err(Error::UpdateNotSupported)
     }
 
-    fn set_val(&mut self, field_name: &str, val: Value) -> ScanResult<()> {
+    fn set_val(&mut self, field_name: &str, val: &Value) -> ScanResult<()> {
         Err(Error::UpdateNotSupported)
     }
 

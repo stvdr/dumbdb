@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{scan::scan::Scan, schema::Schema};
 
 use super::expression::Expression;
@@ -32,4 +34,10 @@ impl Term {
 
     // TODO
     //pub fn equates_with_field(&self, field_name: &str) -> Optional<String> {}
+}
+
+impl Display for Term {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} = {}", self.lhs, self.rhs)
+    }
 }

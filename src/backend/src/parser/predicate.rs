@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{planning::plan::Plan, scan::scan::Scan};
 
 use super::term::Term;
@@ -36,6 +38,20 @@ impl Predicate {
 
     pub fn reduction_factor(&self, plan: &dyn Plan) -> u64 {
         1
+    }
+}
+
+impl Display for Predicate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let terms = self
+            .terms
+            .iter()
+            .map(|t| format!("{}", t))
+            .intersperse(" AND ".to_string());
+        for term in terms {
+            write!(f, "{}", term)?;
+        }
+        Ok(())
     }
 }
 

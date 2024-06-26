@@ -59,37 +59,41 @@ impl Scan for SelectScan {
     fn close(&mut self) {
         self.scan.close()
     }
-}
 
-//impl UpdateScan for SelectScan<'_> {
-//    fn set_int(&mut self, field_name: &str, val: i32) {
-//        self.scan.set_int(field_name, val);
-//    }
-//
-//    fn set_string(&mut self, field_name: &str, val: &str) {
-//        self.scan.set_string(field_name, val);
-//    }
-//
-//    fn set_val(&mut self, field_name: &str, val: Constant) {
-//        self.scan.set_val(field_name, val);
-//    }
-//
-//    fn insert(&mut self) {
-//        self.scan.insert();
-//    }
-//
-//    fn delete(&mut self) {
-//        self.scan.delete();
-//    }
-//
-//    fn get_rid(&self) -> RID {
-//        self.scan.get_rid()
-//    }
-//
-//    fn move_to_rid(&mut self, rid: RID) {
-//        self.scan.move_to_rid(rid);
-//    }
-//}
+    fn set_int(&mut self, field_name: &str, val: i32) -> ScanResult<()> {
+        self.scan.set_int(field_name, val)?;
+        Ok(())
+    }
+
+    fn set_string(&mut self, field_name: &str, val: &str) -> ScanResult<()> {
+        self.scan.set_string(field_name, val)?;
+        Ok(())
+    }
+
+    fn set_val(&mut self, field_name: &str, val: &Value) -> ScanResult<()> {
+        self.scan.set_val(field_name, val)?;
+        Ok(())
+    }
+
+    fn insert(&mut self) -> ScanResult<()> {
+        self.scan.insert()?;
+        Ok(())
+    }
+
+    fn delete(&mut self) -> ScanResult<()> {
+        self.scan.delete()?;
+        Ok(())
+    }
+
+    fn get_rid(&self) -> ScanResult<RID> {
+        Ok(self.scan.get_rid()?)
+    }
+
+    fn move_to_rid(&mut self, rid: RID) -> ScanResult<()> {
+        self.scan.move_to_rid(rid)?;
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {

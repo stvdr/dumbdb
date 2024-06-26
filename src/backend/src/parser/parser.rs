@@ -1,4 +1,4 @@
-use std::iter::Peekable;
+use std::{fmt::Display, iter::Peekable};
 
 use super::{
     constant::Value,
@@ -18,7 +18,7 @@ pub type ViewName = String;
 pub struct DeleteNode(pub TableName, pub Option<Predicate>);
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct InsertNode(TableName, Vec<FieldName>, Vec<Value>);
+pub struct InsertNode(pub TableName, pub Vec<FieldName>, pub Vec<Value>);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct SelectNode {
@@ -27,12 +27,26 @@ pub struct SelectNode {
     pub predicate: Option<Predicate>,
 }
 
+impl Display for SelectNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let field_names = self.fields.join(", ");
+        let table_names = self.tables.join(", ");
+        let pred = if let Some(pred) = &self.predicate {
+            format!(" WHERE {}", pred)
+        } else {
+            "".to_string()
+        };
+
+        write!(f, "SELECT {} FROM {}{}", field_names, table_names, pred)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct UpdateNode {
-    id: String,
-    field: FieldName,
-    expr: Expression,
-    where_clause: Option<Predicate>,
+    pub id: String,
+    pub field: FieldName,
+    pub expr: Expression,
+    pub where_clause: Option<Predicate>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -224,6 +238,7 @@ impl<'a> Parser<'a> {
     fn parse_create_view(&mut self) -> Result<CreateNode, String> {
         if let Token::Identifier(view_name) = self.next_token()?
             && self.expect_token(Token::As)?
+            && self.expect_token(Token::Select)?
         {
             Ok(CreateNode::View(view_name, self.parse_select()?))
         } else {
@@ -419,6 +434,21 @@ mod tests {
                 )
             ),
 
+        test_parser_create_view_1: "CREATE VIEW view_test AS SELECT f1, f2 FROM test_table" =>
+            Ok(
+                RootNode::Create(
+                    CreateNode::View(
+                        "view_test".to_string(),
+                        SelectNode{
+                            fields: vec!["f1".to_string(), "f2".to_string()],
+                            tables: vec!["test_table".to_string()],
+                            predicate: None,
+                        }
+                    )
+                )
+            ),
+
+
         test_parser_update_1: "UPDATE test_table SET test_field = 10" =>
             Ok(
                 RootNode::Update(
@@ -439,7 +469,7 @@ mod tests {
                         where_clause: Some(Predicate::from_term(
                                 Term::new(
                                     Expression::Field("other_field".to_string()),
-                                    Expression::Constant(Value::Varchar("'testing!'".to_string()))
+                                    Expression::Constant(Value::Varchar("testing!".to_string()))
                                 )
                         ))
                     })
@@ -459,7 +489,7 @@ mod tests {
                         Some(Predicate::from_term(
                             Term::new(
                                 Expression::Field("field".to_string()),
-                                Expression::Constant(Value::Varchar("'testing!'".to_string()))
+                                Expression::Constant(Value::Varchar("testing!".to_string()))
                             )))
                     )
                 )
@@ -472,8 +502,8 @@ mod tests {
                         vec!["a".to_string(), "b".to_string(), "c".to_string()],
                         vec![
                             Value::Int(1),
-                            Value::Varchar("'test1'".to_string()),
-                            Value::Varchar("'test2'".to_string())])
+                            Value::Varchar("test1".to_string()),
+                            Value::Varchar("test2".to_string())])
                 )
             ),
 
