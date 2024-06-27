@@ -28,7 +28,7 @@ impl Planner {
     }
 
     pub fn create_query_plan(
-        &mut self,
+        &self,
         cmd: &str,
         tx: Arc<Mutex<Tx>>,
     ) -> Result<Box<dyn Plan>, String> {
