@@ -4,8 +4,9 @@ use crate::{
     metadata::metadata_manager::MetadataManager,
     parser::{
         lexer::Lexer,
-        parser::{Parser, RootNode, SelectNode},
+        parser::{Parser, RootNode, SelectField, SelectNode},
     },
+    schema::Schema,
     transaction::Tx,
 };
 
@@ -25,6 +26,8 @@ impl BasicQueryPlanner {
 }
 
 impl QueryPlanner for BasicQueryPlanner {
+    //fn expand_select_star(&self, )
+
     fn create_plan(&self, data: &SelectNode, tx: Arc<Mutex<Tx>>) -> Result<Box<dyn Plan>, String> {
         let mut plans = vec![];
         for tblname in &data.tables {
@@ -70,7 +73,26 @@ impl QueryPlanner for BasicQueryPlanner {
             plan = Box::new(SelectPlan::new(plan, pred.clone()));
         }
 
-        Ok(Box::new(ProjectPlan::new(plan, data.fields.clone())))
+        let fields = self.prepare_select_fields(plan.schema(), &data.fields);
+        Ok(Box::new(ProjectPlan::new(plan, fields)))
+    }
+}
+
+impl BasicQueryPlanner {
+    /// Expands '*' into all fields in an underlying plan
+    fn prepare_select_fields(
+        &self,
+        plan_schema: &Schema,
+        select_fields: &Vec<SelectField>,
+    ) -> Vec<String> {
+        //let plan_schema = self.plan.schema();
+        select_fields
+            .iter()
+            .flat_map(|f| match f {
+                SelectField::Star => plan_schema.fields(),
+                SelectField::FieldName(name) => vec![name.to_string()],
+            })
+            .collect()
     }
 }
 

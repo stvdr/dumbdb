@@ -20,16 +20,36 @@ pub struct DeleteNode(pub TableName, pub Option<Predicate>);
 #[derive(Debug, PartialEq, Eq)]
 pub struct InsertNode(pub TableName, pub Vec<FieldName>, pub Vec<Value>);
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SelectField {
+    FieldName(String),
+    Star,
+}
+
+impl Display for SelectField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SelectField::FieldName(name) => write!(f, "{}", name),
+            SelectField::Star => write!(f, "*"),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct SelectNode {
-    pub fields: Vec<FieldName>,
+    pub fields: Vec<SelectField>,
     pub tables: Vec<TableName>,
     pub predicate: Option<Predicate>,
 }
 
 impl Display for SelectNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let field_names = self.fields.join(", ");
+        let field_names = self
+            .fields
+            .iter()
+            .map(|f| format!("{}", f))
+            .collect::<Vec<String>>()
+            .join(", ");
         let table_names = self.tables.join(", ");
         let pred = if let Some(pred) = &self.predicate {
             format!(" WHERE {}", pred)
@@ -362,8 +382,27 @@ impl<'a> Parser<'a> {
         self.parse_identifier_list()
     }
 
-    fn parse_select_list(&mut self) -> Result<Vec<FieldName>, String> {
-        self.parse_identifier_list()
+    fn parse_select_list(&mut self) -> Result<Vec<SelectField>, String> {
+        let mut items = Vec::new();
+
+        loop {
+            if self.next_token_is(Token::Splat) {
+                items.push(SelectField::Star);
+
+                // eat the splat token
+                self.expect_token(Token::Splat);
+            } else {
+                items.push(SelectField::FieldName(self.parse_identifier()?));
+            }
+
+            if !self.next_token_is(Token::Comma) {
+                break;
+            }
+            // eat the comma
+            self.expect_token(Token::Comma)?;
+        }
+
+        Ok(items)
     }
 
     fn parse_select(&mut self) -> Result<SelectNode, String> {
@@ -440,7 +479,7 @@ mod tests {
                     CreateNode::View(
                         "view_test".to_string(),
                         SelectNode{
-                            fields: vec!["f1".to_string(), "f2".to_string()],
+                            fields: vec![SelectField::FieldName("f1".to_string()), SelectField::FieldName("f2".to_string())],
                             tables: vec!["test_table".to_string()],
                             predicate: None,
                         }
@@ -511,7 +550,33 @@ mod tests {
             Ok(
                 RootNode::Select(
                     SelectNode{
-                        fields: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+                        fields: vec![
+                            SelectField::FieldName("a".to_string()),
+                            SelectField::FieldName("b".to_string()),
+                            SelectField::FieldName("c".to_string())
+                        ],
+                        tables: vec!["t1".to_string(), "t2".to_string()],
+                        predicate: Some(Predicate::from_term(
+                            Term::new(
+                                Expression::Field("a".to_string()),
+                                Expression::Field("c".to_string())
+                            )))}
+                )
+            ),
+
+
+        test_parser_select_all: "SELECT *, a, b, *, c, * FROM t1, t2 WHERE a = c" =>
+            Ok(
+                RootNode::Select(
+                    SelectNode{
+                        fields: vec![
+                            SelectField::Star,
+                            SelectField::FieldName("a".to_string()),
+                            SelectField::FieldName("b".to_string()),
+                            SelectField::Star,
+                            SelectField::FieldName("c".to_string()),
+                            SelectField::Star
+                        ],
                         tables: vec!["t1".to_string(), "t2".to_string()],
                         predicate: Some(Predicate::from_term(
                             Term::new(

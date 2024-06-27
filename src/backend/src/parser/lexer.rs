@@ -147,6 +147,7 @@ impl<'a> Lexer<'a> {
             Some('-') => self.scan_dash(),
             Some('(') => Ok(Token::LeftParen),
             Some(')') => Ok(Token::RightParen),
+            Some('*') => Ok(Token::Splat),
             Some('\'') => self.scan_varchar(),
             Some(ch) if ch.is_digit(10) => self.scan_number(),
             Some(ch) if ch.is_alphabetic() => self.scan_identifier(),

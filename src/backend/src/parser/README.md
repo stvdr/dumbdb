@@ -12,7 +12,8 @@ This module contains code necessary for lexing / parsing SQL statements.
 <Predicate>     := <Term> [ AND <Predicate> ]
 
 <Query>         := SELECT <SelectList> FROM <TableList> [ WHERE <Predicate> ]
-<SelectList>    := <Field> [ , <SelectList> ]
+<SelectList>    := <SelectField> [ , <SelectList> ]
+<SelectField>   := * | <Field>
 <TableList>     := Token::Identifier [ , <TableList> ]
 
 <UpdateCmd> := <Insert> | <Delete> | <Update> | <Create>
