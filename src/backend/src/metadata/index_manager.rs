@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    index::hash_index::HashIndex, layout::Layout, scan::scan::Scan, schema::Schema,
-    table_scan::TableScan, transaction::Tx,
+    layout::Layout, scan::scan::Scan, schema::Schema, table_scan::TableScan, transaction::Tx,
 };
 
 use super::{
@@ -36,9 +35,9 @@ impl IndexInfo {
     }
 
     // TODO: update after index definitions exist
-    pub fn open(&self) -> HashIndex {
-        HashIndex {}
-    }
+    //pub fn open(&self) -> HashIndex {
+    //    HashIndex {}
+    //}
 
     // TODO: update after index definitions exist
     pub fn blocks_accessed(&self) -> u64 {

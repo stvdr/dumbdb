@@ -38,6 +38,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "backend"
+version = "0.1.0"
+dependencies = [
+ "backtrace",
+ "bincode",
+ "byteorder",
+ "env_logger",
+ "log",
+ "serde",
+ "tempfile",
+ "xxhash-rust",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -264,19 +278,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "storage"
-version = "0.1.0"
-dependencies = [
- "backtrace",
- "bincode",
- "byteorder",
- "env_logger",
- "log",
- "serde",
- "tempfile",
-]
-
-[[package]]
 name = "syn"
 version = "2.0.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -417,3 +418,9 @@ name = "windows_x86_64_msvc"
 version = "0.52.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bec47e5bfd1bff0eeaf6d8b485cc1074891a197ab4225d504cb7a1ab88b02bf0"
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "927da81e25be1e1a2901d59b81b37dd2efd1fc9c9345a55007f09bf5a2d3ee03"
