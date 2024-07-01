@@ -29,8 +29,6 @@ impl std::fmt::Debug for FileManager {
 }
 
 impl FileManager {
-    pub type Page = Page;
-
     pub fn new(root_directory: &Path) -> Self {
         if !root_directory.exists() {
             panic!(
@@ -58,7 +56,7 @@ impl FileManager {
         self.root_directory.join(file_id)
     }
 
-    pub fn get_block(&self, bid: &BlockId, page: &mut Self::Page) -> Result<(), Error> {
+    pub fn get_block(&self, bid: &BlockId, page: &mut Page) -> Result<(), Error> {
         let seek_position = Self::get_file_position(bid);
         let file = self.get_or_create_file(&bid.file_id());
 
@@ -74,9 +72,9 @@ impl FileManager {
         let mut file = file.lock().unwrap();
 
         //assert!(seek_position + page.data.len() as u64 <= file.metadata()?.len());
-        if seek_position + page.data.len() as u64 <= file.metadata()?.len() {
+        if seek_position + PAGE_SIZE as u64 <= file.metadata()?.len() {
             file.seek(SeekFrom::Start(seek_position))?;
-            file.read_exact(&mut page.data)?;
+            file.read_exact(page.raw_mut())?;
         }
 
         Ok(())
@@ -88,7 +86,7 @@ impl FileManager {
     ///
     /// * `blk` - The BlockId that identifies where the page should be written.
     /// * `page` - The page that will be written.
-    pub fn write_block(&self, blk: &BlockId, page: &Self::Page) -> Result<(), Error> {
+    pub fn write_block(&self, blk: &BlockId, page: &Page) -> Result<(), Error> {
         let seek_position = Self::get_file_position(blk);
         let file;
         {
@@ -101,10 +99,10 @@ impl FileManager {
 
         let mut file = file.lock().unwrap();
 
-        assert!(seek_position + page.data.len() as u64 <= file.metadata()?.len());
+        assert!(seek_position + PAGE_SIZE as u64 <= file.metadata()?.len());
 
         file.seek(SeekFrom::Start(seek_position))?;
-        file.write_all(&page.data)?;
+        file.write_all(page.raw())?;
         file.flush()?;
         file.sync_data()?;
 
@@ -113,12 +111,12 @@ impl FileManager {
 
     // TODO: proper error handling
     /// Append the provided page to the file identified by the file_id
-    pub fn append_block(&self, file_id: &str, page: &Self::Page) -> Result<BlockId, Error> {
+    pub fn append_block(&self, file_id: &str, page: &Page) -> Result<BlockId, Error> {
         let file = self.get_or_create_file(file_id);
         let mut file = file.lock().unwrap();
         let block_start = file.seek(SeekFrom::End(0))?;
         let block_number = (block_start - HEADER_SIZE) / PAGE_SIZE as u64;
-        file.write_all(&page.data)?;
+        file.write_all(page.raw())?;
         file.sync_all()?;
 
         Ok(BlockId::new(file_id, block_number))
@@ -225,23 +223,23 @@ mod tests {
             assert_eq!(file_mgr.length(&file_name).unwrap(), 0);
             for b in 0..3u8 {
                 let mut page = Page::new();
-                page.data = [b; PAGE_SIZE];
+                *page.raw_mut() = [b; PAGE_SIZE];
 
                 // Append a new block
                 let block_id = file_mgr.append_block(&file_name, &page).unwrap();
                 file_mgr.get_block(&block_id, &mut page).unwrap();
                 assert_eq!(block_id.num(), b as u64);
                 assert_eq!(block_id.file_id(), file_name);
-                assert_eq!(page.data, [b; PAGE_SIZE]);
+                assert_eq!(page.raw(), &[b; PAGE_SIZE]);
 
                 // Write over the appended block
-                page.data = [b + 100; PAGE_SIZE];
+                *page.raw_mut() = [b + 100; PAGE_SIZE];
                 file_mgr.write_block(&block_id, &page).unwrap();
 
                 // Read the re-written block into a new page
                 let mut new_page = Page::new();
                 file_mgr.get_block(&block_id, &mut new_page).unwrap();
-                assert_eq!(page.data, new_page.data);
+                assert_eq!(page.raw(), new_page.raw());
             }
 
             assert_eq!(3, file_mgr.length(&file_name).unwrap());

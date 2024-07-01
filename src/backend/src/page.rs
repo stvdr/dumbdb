@@ -3,10 +3,12 @@ use std::mem::size_of;
 
 pub const PAGE_SIZE: usize = 4096;
 
+pub const EMPTY_STRING: &str = &"";
+
 /// Page is a block that has been pulled into a memory buffer.
 #[derive(Debug)]
 pub struct Page {
-    pub data: [u8; PAGE_SIZE],
+    data: [u8; PAGE_SIZE],
 }
 
 pub trait WriteTypeToPage {
@@ -35,6 +37,26 @@ macro_rules! impl_endian_io_traits {
             }
         }
     };
+}
+
+impl<'a> ReadTypeFromPage<'a> for &'a str {
+    fn read(page: &'a Page, offset: usize) -> &'a str {
+        // Read the bytes that indicate the length of the string
+        let len_bytes = &page.data[offset..offset + size_of::<u32>()];
+
+        // Convert the length into a primitive
+        let len = u32::from_be_bytes(len_bytes.try_into().unwrap()) as usize;
+
+        if len == 0 {
+            return EMPTY_STRING;
+        }
+
+        unsafe {
+            std::str::from_utf8_unchecked(
+                &page.data[offset + size_of::<u32>()..offset + size_of::<u32>() + len],
+            )
+        }
+    }
 }
 
 impl WriteTypeToPage for &str {
@@ -90,8 +112,12 @@ impl Page {
         }
     }
 
-    pub fn raw(&self) -> [u8; PAGE_SIZE] {
-        return self.data;
+    pub fn raw_mut(&mut self) -> &mut [u8; PAGE_SIZE] {
+        &mut self.data
+    }
+
+    pub fn raw(&self) -> &[u8; PAGE_SIZE] {
+        &self.data
     }
 
     /// Write data to a page at the provided offset and return the number of bytes written.    

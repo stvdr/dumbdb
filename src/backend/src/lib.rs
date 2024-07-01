@@ -27,6 +27,7 @@ mod schema;
 mod table_scan;
 mod transaction;
 
+pub mod datum;
 mod index;
 mod metadata;
 mod parser;
