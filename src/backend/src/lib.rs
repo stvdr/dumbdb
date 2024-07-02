@@ -32,3 +32,4 @@ mod metadata;
 mod parser;
 mod planning;
 mod scan;
+mod slotted_page;
