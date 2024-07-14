@@ -16,7 +16,6 @@ const HEADER_SIZE: u64 = 1024;
 pub struct FileManager {
     files: RwLock<HashMap<String, Arc<Mutex<File>>>>,
     root_directory: PathBuf,
-    page_size: usize,
 }
 
 impl std::fmt::Debug for FileManager {
@@ -42,12 +41,11 @@ impl FileManager {
         Self {
             files: RwLock::new(HashMap::new()),
             root_directory: root_directory.to_path_buf(),
-            page_size: PAGE_SIZE,
         }
     }
 
     pub fn page_size(&self) -> usize {
-        self.page_size
+        PAGE_SIZE
     }
 
     fn get_file_position(bid: &BlockId) -> u64 {

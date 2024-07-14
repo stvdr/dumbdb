@@ -162,5 +162,23 @@ mod tests {
         assert!(idx.next());
         assert_eq!(idx.get_rid(), Some(RID::new(34, 12)));
         assert!(!idx.next());
+
+        idx.delete(&Value::Int(15), RID::new(33, 12));
+        idx.delete(&Value::Int(100), RID::new(34, 12));
+
+        idx.before_first(&Value::Int(13));
+        assert!(idx.next());
+        assert_eq!(idx.get_rid(), Some(RID::new(32, 10)));
+        assert!(!idx.next());
+
+        idx.before_first(&Value::Int(15));
+        assert!(idx.next());
+        assert_eq!(idx.get_rid(), Some(RID::new(33, 11)));
+        assert!(idx.next());
+        assert_eq!(idx.get_rid(), Some(RID::new(33, 13)));
+        assert!(!idx.next());
+
+        idx.before_first(&Value::Int(100));
+        assert!(!idx.next());
     }
 }
