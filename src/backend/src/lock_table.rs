@@ -4,6 +4,7 @@ use std::{
 };
 
 use backtrace::Backtrace;
+use tracing::trace;
 
 use crate::block_id::BlockId;
 
@@ -50,16 +51,14 @@ impl LockTable {
     ///
     /// * `blk` - The BlockId that the shared lock will be held on.
     pub fn slock(&self, blk: &BlockId) {
-        log::trace!("requesting an slock");
-        //let backtrace = Backtrace::new();
-        //log::trace!("{backtrace:?}");
+        trace!("requesting an slock");
 
         let lock = {
             let mut locks = self.locks.lock().unwrap();
             if let Some(lock) = locks.get(blk).cloned() {
                 lock
             } else {
-                log::trace!("adding new shared lock");
+                trace!("adding new shared lock");
                 locks.insert(blk.clone(), Arc::new(Lock::new_shared()));
                 return;
             }
@@ -68,11 +67,11 @@ impl LockTable {
         {
             let mut count = lock.count.lock().unwrap();
             while *count == -1 {
-                log::trace!("waiting for slock. xlock already exists");
+                trace!("waiting for slock. xlock already exists");
                 count = lock.condvar.wait(count).unwrap();
             }
 
-            log::trace!("successfully retrieved slock");
+            trace!("successfully retrieved slock");
             *count += 1;
         }
     }
@@ -83,14 +82,14 @@ impl LockTable {
     ///
     /// * `blk` - The BlockId that the exclusive lock will be held on.
     pub fn xlock(&self, blk: &BlockId) {
-        log::trace!("requesting an xlock");
+        trace!("requesting an xlock");
 
         let lock = {
             let mut locks = self.locks.lock().unwrap();
             if let Some(lock) = locks.get(blk).cloned() {
                 lock
             } else {
-                log::trace!("inserting new xlock");
+                trace!("inserting new xlock");
                 locks.insert(blk.clone(), Arc::new(Lock::new_exclusive()));
                 return;
             }
@@ -99,12 +98,12 @@ impl LockTable {
         {
             let mut count = lock.count.lock().unwrap();
             while *count > 1 {
-                log::trace!("waiting for xlock. Lock count > 1");
+                trace!("waiting for xlock. Lock count > 1");
                 // TODO: wait_timeout
                 count = lock.condvar.wait(count).unwrap();
             }
 
-            log::trace!("successfully set xlock");
+            trace!("successfully set xlock");
             *count = -1;
         }
 
@@ -161,7 +160,6 @@ mod tests {
 
     #[test]
     fn test_threaded_locks() {
-        let _ = env_logger::try_init();
         let lock_table = Arc::new(LockTable::new());
 
         let start_barrier = Arc::new(Barrier::new(3));

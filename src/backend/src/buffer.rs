@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+use tracing::trace;
+
 use crate::{block_id::BlockId, file_manager::FileManager, log_manager::LogManager, page::Page};
 
 pub struct Buffer {
@@ -56,7 +58,7 @@ impl Buffer {
     ///
     /// * `blk` - The BlockId describing the block to load into the buffer.
     pub fn assign_to_block(&mut self, blk: BlockId) {
-        log::trace!("Assign to block called");
+        trace!("Assign to block called");
         self.flush();
         self.file_manager.get_block(&blk, &mut self.page).unwrap();
         self.blk = Some(blk);
@@ -65,12 +67,12 @@ impl Buffer {
 
     // TODO: error handling
     pub fn flush(&mut self) {
-        log::trace!("flush called");
+        trace!("flush called");
         match &self.blk {
             Some(blk) => {
-                log::trace!("Checking to see if block needs to be written to storage");
+                trace!("Checking to see if block needs to be written to storage");
                 if self.tx_num >= 0 {
-                    log::trace!("Writing to storage");
+                    trace!("Writing to storage");
                     {
                         let mut lm = self.log_manager.lock().unwrap();
                         lm.flush(self.lsn);
@@ -82,7 +84,7 @@ impl Buffer {
                 }
             }
             None => {
-                log::trace!("No block to flush");
+                trace!("No block to flush");
                 return;
             }
         }

@@ -78,9 +78,9 @@ impl StatisticsManager {
         self.num_calls = 0;
         let tcat_layout = self
             .tbl_mgr
-            .get_table_layout("tblcat", tx)
-            .expect("tblcat metadata table does not exist");
-        let mut scan = TableScan::new(tx.clone(), tcat_layout, "tblcat");
+            .get_table_layout("tablecat", tx)
+            .expect("tablecat metadata table does not exist");
+        let mut scan = TableScan::new(tx.clone(), tcat_layout, "tablecat");
         while scan.next() {
             let tblname = scan
                 .get_string("tblname")

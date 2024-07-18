@@ -1,8 +1,10 @@
 use std::sync::{Arc, Mutex};
 
+use tracing::trace;
+
 use crate::{block_id::BlockId, layout::Layout, parser::constant::Value, transaction::Tx};
 
-use super::btree_page::BTPage;
+use super::btree_page::{BTPage, LeafBlockNum};
 
 pub struct DirectoryEntry {
     data_val: Value,
@@ -35,18 +37,17 @@ impl BTreeDirectory {
         }
     }
 
-    pub fn close(&self) {
-        self.contents.close();
-    }
-
-    /// Search for a key in the directory and return the block
-    pub fn search(&mut self, key: &Value) -> i32 {
+    /// Search for the leaf node that contains the provided key in directory nodes and return the
+    /// block number of the leaf node.
+    pub fn search(&mut self, key: &Value) -> LeafBlockNum {
+        trace!("Searching for leaf with key: {}", key);
         let mut childblk = self.find_child_block(&key);
         while self.contents.get_flag() > 0 {
             self.contents = BTPage::new(self.tx.clone(), childblk, self.layout.clone());
             childblk = self.find_child_block(&key);
         }
 
+        trace!("Found leaf at blocknum: {}", childblk.num());
         childblk.num() as i32
     }
 
@@ -69,9 +70,11 @@ impl BTreeDirectory {
         }
 
         let childblk = self.find_child_block(&entry.data_val);
-        let mut child = BTreeDirectory::new(self.tx.clone(), &childblk, self.layout.clone());
-        let new_entry = child.insert(&entry);
-        child.close();
+        let new_entry = {
+            let mut child = BTreeDirectory::new(self.tx.clone(), &childblk, self.layout.clone());
+            child.insert(&entry)
+        };
+
         if let Some(new_entry) = new_entry {
             self.insert_entry(&new_entry)
         } else {
@@ -80,7 +83,7 @@ impl BTreeDirectory {
     }
 
     fn insert_entry(&mut self, entry: &DirectoryEntry) -> Option<DirectoryEntry> {
-        let newslot = 1 + self.contents.find_slot_before(&entry.data_val);
+        let newslot = (1 + self.contents.find_slot_before(&entry.data_val)) as u32;
         self.contents
             .insert_dir(newslot, &entry.data_val, entry.blk_num as i32);
 
@@ -98,17 +101,11 @@ impl BTreeDirectory {
 
     fn find_child_block(&self, key: &Value) -> BlockId {
         let mut slot = self.contents.find_slot_before(&key);
-        if self.contents.get_data_val(slot + 1) == *key {
+        if self.contents.get_data_val((slot + 1) as u32) == *key {
             slot += 1;
         }
 
-        let blknum = self.contents.get_child_num(slot);
+        let blknum = self.contents.get_child_num(slot as u32);
         BlockId::new(&self.filename, blknum as u64)
-    }
-}
-
-impl Drop for BTreeDirectory {
-    fn drop(&mut self) {
-        self.close();
     }
 }

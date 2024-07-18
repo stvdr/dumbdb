@@ -263,8 +263,6 @@ mod tests {
 
     #[test]
     fn test_simple_scan() {
-        let _ = env_logger::try_init();
-
         let td = tempdir().unwrap();
         let data_dir = td.path().join("data");
         fs::create_dir_all(&data_dir).unwrap();

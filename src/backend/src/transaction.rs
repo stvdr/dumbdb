@@ -1,6 +1,15 @@
-use std::sync::{
-    atomic::{AtomicI64, AtomicU64},
-    Arc, Mutex,
+use std::{
+    fmt::{Debug, Write},
+    sync::{
+        atomic::{AtomicI64, AtomicU64},
+        Arc, Mutex,
+    },
+};
+
+use tracing::{
+    span,
+    span::{Entered, EnteredSpan},
+    trace, Level, Span,
 };
 
 use crate::{
@@ -60,7 +69,7 @@ impl Tx {
 
         self.concurrency_mgr.release();
         self.buffer_list.lock().unwrap().unpin_all();
-        log::trace!("Transaction {} committed", self.tx_num);
+        trace!("Transaction {} committed", self.tx_num);
     }
 
     /// Rollback the transaction associated with this RecoveryManager
@@ -93,17 +102,21 @@ impl Tx {
 
         self.concurrency_mgr.release();
         self.buffer_list.lock().unwrap().unpin_all();
-        log::trace!("Rolled back transaction with id {}", self.tx_num);
+        trace!("Rolled back transaction with id {}", self.tx_num);
     }
 
     /// Pin the specified block
+    #[tracing::instrument(name = "tx-pin", skip(self, blk), fields(txid = self.tx_num(), blk = %blk))]
     pub fn pin(&mut self, blk: &BlockId) {
+        trace!("Pinning block {}", blk);
         // TODO: error handling
         self.buffer_list.lock().unwrap().pin(blk);
     }
 
     /// Unpin the specified block
+    #[tracing::instrument(name = "tx-unpin", skip(self, blk), fields(txid = self.tx_num(), blk = %blk))]
     pub fn unpin(&mut self, blk: &BlockId) {
+        trace!("Unpinning block {}", blk);
         // TODO: error handling
         self.buffer_list.lock().unwrap().unpin(blk);
     }
@@ -212,7 +225,7 @@ impl Tx {
     ///
     /// * `file_id` - The id of the file that will have a block appended.
     pub fn append(&mut self, file_id: &str) -> BlockId {
-        log::trace!("xlocking the dummy block for file '{}'", file_id);
+        trace!("xlocking the dummy block for file '{}'", file_id);
 
         // Take an exclusive lock on the dummy block
         self.concurrency_mgr
@@ -299,6 +312,12 @@ impl Tx {
         };
         let encoded = bincode::serialize(&log_record).unwrap();
         self.log_mgr.lock().unwrap().append(&encoded)
+    }
+}
+
+impl Debug for Tx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "tx<{}>", self.tx_num())
     }
 }
 
@@ -432,23 +451,17 @@ mod tests {
                 tx_a.pin(&blk1);
                 tx_a.pin(&blk2);
 
-                log::trace!("[A] wait slock on blk1");
                 let val = tx_a.get_int(&blk1, 0);
-                log::trace!("[A] receive slock on blk1");
                 assert_eq!(val, 0);
 
-                log::trace!("[A] signal to C that slock on blk1 was acquired");
                 send_c.send(true).unwrap();
 
                 // Wait for B to signal that it has passed the point of taking an xlock on blk2
-                log::trace!("[A] wait for B to retrieve xlock on blk2");
                 recv_a.recv().unwrap();
 
                 // The slock required here should not be granted until B commits and releases its
                 // xlock on blk2
-                log::trace!("[A] wait slock on blk2");
                 let val = tx_a.get_int(&blk2, 0);
-                log::trace!("[A] receive slock on blk2");
                 assert_eq!(val, 2);
 
                 tx_a.commit();
@@ -463,16 +476,11 @@ mod tests {
                 tx_b.pin(&blk1);
                 tx_b.pin(&blk2);
 
-                log::trace!("[B] wait xlock on blk2");
                 tx_b.set_int(&blk2, 0, 2, false);
-                log::trace!("[B] receive xlock on blk2");
 
-                log::trace!("[B] signal A that xlock as been acquired on blk2");
                 send_a.send(true).unwrap();
 
-                log::trace!("[B] wait slock on blk1");
                 let val = tx_b.get_int(&blk1, 0);
-                log::trace!("[B] receive slock on blk1");
                 assert_eq!(val, 0);
 
                 // The commit will release a shared lock on blk1 and the xlock on blk2
@@ -489,17 +497,12 @@ mod tests {
                 tx_c.pin(&blk2);
 
                 // Wait for A to signal that it has already taken a shared lock on blk1
-                log::trace!("[C] wait for A to acquire shared lock on blk1");
                 recv_c.recv().unwrap();
 
                 // This should block until A commits and releases its slock on blk1
-                log::trace!("[C] wait xlock on blk1");
                 tx_c.set_int(&blk1, 0, 3, false);
-                log::trace!("[C] receive xlock on blk1");
 
-                log::trace!("[C] wait slock on blk2");
                 let val = tx_c.get_int(&blk2, 0);
-                log::trace!("[C] receive slock on blk2");
                 assert_eq!(val, 2);
                 tx_c.commit();
             }

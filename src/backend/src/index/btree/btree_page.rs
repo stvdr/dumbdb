@@ -10,6 +10,9 @@ use crate::{
 type Flag = u32;
 type RecordCount = u32;
 
+pub type LeafBlockNum = i32;
+pub type DirectoryBlockNum = i32;
+
 pub struct BTPage {
     tx: Arc<Mutex<Tx>>,
     current_blk: BlockId,
@@ -26,13 +29,13 @@ impl BTPage {
         }
     }
 
-    pub fn find_slot_before(&self, key: &Value) -> u32 {
+    pub fn find_slot_before(&self, key: &Value) -> i32 {
         let mut slot = 0;
         while slot < self.get_num_records() && self.get_data_val(slot) < *key {
             slot += 1;
         }
 
-        slot - 1
+        (slot as i32 - 1)
     }
 
     pub fn is_full(&self) -> bool {
@@ -63,18 +66,7 @@ impl BTPage {
         blk
     }
 
-    pub fn set_flag(&self, val: i32) {
-        self.tx
-            .lock()
-            .unwrap()
-            .set_int(&self.current_blk, 0, val as i32, true);
-    }
-
-    pub fn get_flag(&self) -> i32 {
-        self.tx.lock().unwrap().get_int(&self.current_blk, 0)
-    }
-
-    pub fn format(&self, blk: &BlockId, flag: i32, tx: &mut MutexGuard<'_, Tx>) {
+    pub fn format(&self, blk: &BlockId, flag: i32, tx: &mut Tx) {
         tx.set_int(&self.current_blk, 0, flag as i32, false);
         tx.set_int(&self.current_blk, size_of::<Flag>(), 0, false);
         let recsize = self.layout.slot_size();
@@ -94,12 +86,31 @@ impl BTPage {
         }
     }
 
+    /// Set the number of records currently stored in this page.
+    fn set_num_records(&self, n: u32) {
+        self.tx
+            .lock()
+            .unwrap()
+            .set_int(&self.current_blk, size_of::<Flag>(), n as i32, true);
+    }
+
     /// Get the number of records currently stored in the page
     pub fn get_num_records(&self) -> u32 {
         self.tx
             .lock()
             .unwrap()
-            .get_int(&self.current_blk, size_of::<RecordCount>() as usize) as u32
+            .get_int(&self.current_blk, size_of::<Flag>() as usize) as u32
+    }
+
+    pub fn set_flag(&self, val: i32) {
+        self.tx
+            .lock()
+            .unwrap()
+            .set_int(&self.current_blk, 0, val as i32, true);
+    }
+
+    pub fn get_flag(&self) -> i32 {
+        self.tx.lock().unwrap().get_int(&self.current_blk, 0)
     }
 
     /// Delete the record at the provided slot by shifting all records [slot+1..] to the left by 1.
@@ -141,14 +152,6 @@ impl BTPage {
         self.set_val(slot, "dataval", val);
         self.set_int(slot, "block", rid.block_num() as i32);
         self.set_int(slot, "id", rid.slot() as i32);
-    }
-
-    /// Set the number of records currently stored in this page.
-    fn set_num_records(&self, n: u32) {
-        self.tx
-            .lock()
-            .unwrap()
-            .set_int(&self.current_blk, size_of::<Flag>(), n as i32, true);
     }
 
     /// Transfers all records starting at `slot` (inclusive) to the specified destination page.

@@ -47,7 +47,7 @@ impl TableManager {
             fcat_layout,
         };
 
-        sel.create_table("tblcat", &sel.tcat_layout.schema(), tx);
+        sel.create_table("tablecat", &sel.tcat_layout.schema(), tx);
         sel.create_table("fieldcat", &sel.fcat_layout.schema(), tx);
 
         sel

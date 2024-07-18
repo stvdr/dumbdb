@@ -1,3 +1,5 @@
+use tracing::{span, trace, trace_span};
+
 use crate::{
     block_id::BlockId,
     buffer::Buffer,
@@ -5,7 +7,10 @@ use crate::{
     file_manager::FileManager,
     log_manager::LogManager,
 };
-use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::{
+    fmt::write,
+    sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard},
+};
 
 use std::collections::HashMap;
 
@@ -57,7 +62,7 @@ impl<E: EvictionPolicy> BufferManager<E> {
 
     /// Evict a block from a buffer to get a free buffer
     fn get_evicted_buffer(&mut self) -> Option<usize> {
-        log::trace!("Evicting block from buffer");
+        trace!("Evicting block from buffer");
         self.eviction_policy.evict()
     }
 
@@ -65,35 +70,28 @@ impl<E: EvictionPolicy> BufferManager<E> {
     pub fn pin(&mut self, blk: &BlockId) -> Arc<RwLock<Buffer>> {
         let buf_index = match self.blk_to_buf.get(&blk) {
             Some(buf_index) => {
-                log::trace!(
-                    "Pinning buffer already holding block {} at index {}",
-                    blk,
-                    *buf_index
-                );
+                let _span = trace_span!("bufmgr-pin", bufidx = buf_index).entered();
+
+                trace!("pinning block");
 
                 // The block is loaded into an existing buffer
-                let arc = Arc::clone(&self.buffers[*buf_index]);
+                let arc = self.buffers[*buf_index].clone();
                 let mut buf = arc.write().unwrap();
                 if !buf.is_pinned() {
-                    // If the buffer was not pinned, the number of available buffers has been
-                    // decremented
+                    // If the buffer was not pinned, the number of available buffers has
+                    // must be decremented
                     self.num_available -= 1;
-                    log::trace!(
-                        "Buffer {} is not already pinned - decremented available buffers to {}",
-                        *buf_index,
+                    trace!(
+                        "buffer is not already pinned - decremented available buffers to {}",
                         self.num_available
                     );
                 }
                 buf.pin();
-                log::trace!(
-                    "Increased buffer {} pin count to {}",
-                    *buf_index,
-                    buf.pin_count()
-                );
+                trace!("Increased buffer pin count to {}", buf.pin_count());
                 *buf_index
             }
             None => {
-                log::trace!("Block needs to be pulled into buffer, looking for free buffer");
+                trace!("block needs to be pulled into a buffer, looking for a free buffer");
 
                 // The block needs to be pulled into a buffer, look for a free buffer
                 let buf_index = self
@@ -103,20 +101,16 @@ impl<E: EvictionPolicy> BufferManager<E> {
                     // TODO: condition variable to notify waiting threads on buffer availability
                     .expect("No available buffers");
 
-                log::trace!("Found available buffer at index {}", buf_index);
+                let _span = trace_span!("bufmgr-pin", bufidx = buf_index).entered();
 
                 // Take a write lock on the unused buffer so the block can be loaded
-                let arc = Arc::clone(&self.buffers[buf_index]);
-                let mut unused_buf = arc.write().expect("Unable to write lock unused buffer");
+                let arc = self.buffers[buf_index].clone();
+                let mut unused_buf = arc.write().unwrap();
 
                 // If the buffer was already holding a block, make sure we are no longer mapping
                 // the block to a buffer
                 if let Some(block_id) = &unused_buf.blk {
-                    log::trace!(
-                        "Removing block {} from buffer at index {}",
-                        block_id,
-                        buf_index
-                    );
+                    trace!("removing existing block {} from buffer", block_id);
                     self.blk_to_buf.remove(&block_id);
                 }
 
@@ -128,7 +122,7 @@ impl<E: EvictionPolicy> BufferManager<E> {
                 unused_buf.pin();
                 assert_eq!(unused_buf.pin_count(), 1);
 
-                log::trace!("Added block {} to buffer at index {}", blk, buf_index);
+                trace!("added block to buffer");
                 buf_index
             }
         };
@@ -156,16 +150,16 @@ impl<E: EvictionPolicy> BufferManager<E> {
     /// # Arguments
     ///
     /// * `buffer` - A mutable reference to a Buffer.
-    pub fn unpin_locked(&mut self, buffer: &mut Buffer) {
+    fn unpin_locked(&mut self, buffer: &mut Buffer) {
         buffer.unpin();
         if !buffer.is_pinned() {
             let b = buffer.blk.as_ref().unwrap();
             if let Some(buf_index) = self.blk_to_buf.get(b) {
-                log::trace!("Marking buffer {} as available for eviction", buf_index);
+                trace!("Marking buffer {} as available for eviction", buf_index);
                 self.eviction_policy.add(*buf_index);
             }
             self.num_available += 1;
-            log::trace!("Incremented available buffers to {}", self.num_available());
+            trace!("Incremented available buffers to {}", self.num_available());
         }
     }
 

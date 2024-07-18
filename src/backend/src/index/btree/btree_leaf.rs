@@ -11,7 +11,7 @@ pub struct BTreeLeaf {
     layout: Layout,
     search_key: Value,
     contents: BTPage,
-    current_slot: u32,
+    current_slot: i32,
     file_id: String,
 }
 
@@ -29,15 +29,11 @@ impl BTreeLeaf {
         }
     }
 
-    pub fn close(&self) {
-        self.contents.close()
-    }
-
     pub fn next(&mut self) -> bool {
         self.current_slot += 1;
-        if self.current_slot >= self.contents.get_num_records() {
+        if self.current_slot >= self.contents.get_num_records() as i32 {
             self.try_overflow()
-        } else if self.contents.get_data_val(self.current_slot) == self.search_key {
+        } else if self.contents.get_data_val(self.current_slot as u32) == self.search_key {
             true
         } else {
             self.try_overflow()
@@ -45,13 +41,17 @@ impl BTreeLeaf {
     }
 
     pub fn get_data_rid(&self) -> RID {
-        self.contents.get_data_rid(self.current_slot)
+        assert!(
+            self.current_slot >= 0,
+            "Must call `next()` before accessing data"
+        );
+        self.contents.get_data_rid(self.current_slot as u32)
     }
 
     pub fn delete(&mut self, rid: &RID) {
         while self.next() {
             if self.get_data_rid() == *rid {
-                self.contents.delete(self.current_slot);
+                self.contents.delete(self.current_slot as u32);
                 return;
             }
         }
@@ -67,7 +67,7 @@ impl BTreeLeaf {
             self.current_slot = 0;
             self.contents.set_flag(-1);
             self.contents
-                .insert_leaf(self.current_slot, &self.search_key, rid);
+                .insert_leaf(self.current_slot as u32, &self.search_key, rid);
             return Some(DirectoryEntry::new(&first_val, newblk.num()));
         }
 
@@ -75,7 +75,7 @@ impl BTreeLeaf {
         // At this point, it is guaranteed that the page has space, because splitting happens pre-emptively.
         self.current_slot += 1;
         self.contents
-            .insert_leaf(self.current_slot, &self.search_key, rid);
+            .insert_leaf(self.current_slot as u32, &self.search_key, rid);
 
         if !self.contents.is_full() {
             // Page is not full so no new directory page created.
@@ -130,11 +130,5 @@ impl BTreeLeaf {
         self.contents = BTPage::new(self.tx.clone(), nextblk, self.layout.clone());
         self.current_slot = 0;
         true
-    }
-}
-
-impl Drop for BTreeLeaf {
-    fn drop(&mut self) {
-        self.close();
     }
 }

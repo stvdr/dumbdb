@@ -2,6 +2,7 @@ use core::fmt;
 
 use serde::{Deserialize, Serialize};
 
+// TODO: change `file_id` to an integer identifier and make BlockId derive `Copy`
 // BlockId points to a block's location on disk.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockId {

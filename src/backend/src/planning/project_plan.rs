@@ -13,7 +13,7 @@ impl ProjectPlan {
     pub fn new(plan: Box<dyn Plan>, field_list: Vec<String>) -> Self {
         let mut schema = Schema::new();
         for field in field_list {
-            schema.add(&field, &plan.schema());
+            schema.add_from(&field, &plan.schema());
         }
         Self { plan, schema }
     }

@@ -77,7 +77,14 @@ impl Schema {
         self.add_field(name, 1, length);
     }
 
-    pub fn add(&mut self, name: &str, sch: &Schema) {
+    // TODO: return a `Result` isntead of calling `expect`.
+    /// Adds a field from an existing schema.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the field that must exist in the other schema.
+    /// * `sch` - The other schema that contains the field.
+    pub fn add_from(&mut self, name: &str, sch: &Schema) {
         let typ = sch
             .get_field_type(&name)
             .expect(&format!("schema has no field named '{}'", name));
@@ -90,7 +97,7 @@ impl Schema {
 
     pub fn add_all(&mut self, sch: &Schema) {
         for field_name in sch.fields.iter() {
-            self.add(field_name, sch);
+            self.add_from(field_name, sch);
         }
     }
 

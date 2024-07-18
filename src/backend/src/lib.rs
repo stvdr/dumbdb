@@ -1,5 +1,4 @@
 #![feature(assert_matches)]
-#![feature(generic_const_exprs)]
 #![feature(inherent_associated_types)]
 #![feature(iter_intersperse)]
 #![feature(let_chains)]
