@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+use tracing::trace;
+
 use crate::{
     block_id::BlockId, layout::Layout, parser::constant::Value, rid::RID, transaction::Tx,
 };
@@ -63,6 +65,7 @@ impl BTreeLeaf {
             && let first_val = self.contents.get_data_val(0)
             && first_val > self.search_key
         {
+            trace!("inserting before first record, splitting leaf");
             let newblk = self.contents.split(0, self.contents.get_flag());
             self.current_slot = 0;
             self.contents.set_flag(-1);
@@ -74,13 +77,23 @@ impl BTreeLeaf {
         // Move to the next slot and insert the RID.
         // At this point, it is guaranteed that the page has space, because splitting happens pre-emptively.
         self.current_slot += 1;
+        trace!(
+            "inserting value {} at slot {}",
+            self.search_key,
+            self.current_slot
+        );
         self.contents
             .insert_leaf(self.current_slot as u32, &self.search_key, rid);
 
+        println!("inserted {},{} into leaf", self.search_key, rid);
+
         if !self.contents.is_full() {
+            println!("leaf is not full");
             // Page is not full so no new directory page created.
             return None;
         }
+
+        println!("leaf must be split");
 
         // Page is full, split.
         let first_key = self.contents.get_data_val(0);
@@ -113,7 +126,20 @@ impl BTreeLeaf {
                 }
             }
 
+            println!("splitting at pos: {}", split_pos);
             let newblk = self.contents.split(split_pos, -1);
+
+            {
+                let mut tx = self.tx.lock().unwrap();
+                tx.action_on_raw_page(&self.contents.block(), |page| {
+                    println!("left page: {:?}", page.raw());
+                });
+
+                tx.action_on_raw_page(&newblk, |page| {
+                    println!("right page: {:?}", page.raw());
+                });
+            }
+
             Some(DirectoryEntry::new(&split_key, newblk.num()))
         }
     }

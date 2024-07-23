@@ -1,4 +1,8 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    fs::File,
+    io::{self, Write},
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     block_id::BlockId, index::index::Index, layout::Layout, make_schema, parser::constant::Value,
@@ -72,6 +76,106 @@ impl BTreeIndex {
     pub fn search_cost(num_blocks: usize, rpb: usize) -> i32 {
         1 + ((num_blocks as f64).log10() / (rpb as f64).log10()) as i32
     }
+
+    pub fn generate_dot_file(&self, filename: &str) -> io::Result<()> {
+        let mut file = File::create(filename)?;
+        writeln!(file, "digraph BTree {{")?;
+        writeln!(file, "  node [shape=record, fontsize=10];")?;
+        self.write_dot_node(&mut file, &self.rootblk, true)?;
+        writeln!(file, "}}")?;
+        Ok(())
+    }
+
+    fn write_dot_node(&self, file: &mut File, blk: &BlockId, is_dir: bool) -> io::Result<()> {
+        let layout = if is_dir {
+            self.dir_layout.clone()
+        } else {
+            self.leaf_layout.clone()
+        };
+        let mut page = BTPage::new(self.tx.clone(), blk.clone(), layout);
+        let flag = page.get_flag();
+        let num_records = page.get_num_records();
+
+        if is_dir {
+            // Internal node
+            write!(
+                file,
+                "  internal{} [style = filled, fillcolor=orange, label = \"l: {}",
+                blk.num(),
+                flag
+            )?;
+            for i in 0..num_records {
+                let key = page.get_data_val(i);
+                let block_num = page.get_child_num(i);
+                write!(file, " | <p{}> {},{}", block_num, block_num, key)?;
+            }
+            write!(file, "\"];\n")?;
+
+            for i in 0..num_records {
+                let child_blk = page.get_child_num(i);
+                let child_blk_id = if flag == 0 {
+                    // this internal node points to leaves
+                    writeln!(
+                        file,
+                        "  \"internal{}\":p{} -> \"leaf{}\";",
+                        blk.num(),
+                        child_blk,
+                        child_blk
+                    )?;
+                    BlockId::new(&self.leaf_tbl, child_blk as u64)
+                } else {
+                    // this internal node points to other internal nodes
+                    writeln!(
+                        file,
+                        "  \"internal{}\" -> \"internal{}\";",
+                        blk.num(),
+                        child_blk
+                    )?;
+                    BlockId::new(&self.rootblk.file_id(), child_blk as u64)
+                };
+
+                self.write_dot_node(file, &child_blk_id, flag > 0)?;
+            }
+        } else {
+            // leaf (non-overflow)
+            let overflow_blk = page.get_flag();
+            write!(
+                file,
+                "  leaf{} [style = filled, fillcolor = lightblue, label = \"<p{}> f: {}",
+                blk.num(),
+                overflow_blk,
+                overflow_blk,
+            )?;
+            for i in 0..num_records {
+                let key = page.get_data_val(i);
+                let rid = page.get_data_rid(i);
+                write!(
+                    file,
+                    " | {} (RID: {}, {})",
+                    key,
+                    rid.block_num(),
+                    rid.slot()
+                )?;
+            }
+            writeln!(file, "\"];\n")?;
+
+            if overflow_blk != -1 {
+                // point to an overflow page
+                writeln!(
+                    file,
+                    "  \"leaf{}\":p{} -> \"leaf{}\";",
+                    blk.num(),
+                    overflow_blk,
+                    overflow_blk,
+                )?;
+
+                let overflow_blockid = BlockId::new(&self.leaf_tbl, overflow_blk as u64);
+                self.write_dot_node(file, &overflow_blockid, false)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Index for BTreeIndex {
@@ -125,5 +229,120 @@ impl Index for BTreeIndex {
 
     fn close(&mut self) {
         self.leaf = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tempfile::tempdir;
+
+    use crate::{
+        index::{btree::btree_index::BTreeIndex, index::Index},
+        layout::Layout,
+        make_schema,
+        parser::constant::Value,
+        rid::RID,
+        tests::test_utils::test_db,
+    };
+
+    #[test]
+    fn test_btree_index_no_dupes() {
+        let dir = tempdir().unwrap();
+        let db = test_db(&dir);
+
+        let tx = Arc::new(Mutex::new(db.new_tx()));
+
+        let leaf_layout = Layout::from_schema(make_schema! {
+            "dataval" => i32,
+            "block" => i32,
+            "id" => i32
+        });
+
+        let mut index = BTreeIndex::new(tx, "test-idx", leaf_layout);
+
+        let num_recs = 50;
+
+        for i in 0..num_recs {
+            println!("inserting");
+            index.insert(&Value::Int(i), RID::new(i as u64 / 100, i as i16 % 100));
+        }
+
+        for i in 0..num_recs {
+            index.before_first(&Value::Int(i));
+            assert!(index.next());
+            assert_eq!(
+                index.get_rid(),
+                Some(RID::new(i as u64 / 100, i as i16 % 100))
+            );
+        }
+
+        // Test deletions
+        for i in 0..num_recs {
+            if i % 5 == 0 {
+                index.delete(&Value::Int(i), RID::new(i as u64 / 100, i as i16 % 100));
+            }
+        }
+
+        index.generate_dot_file("graph.dot");
+
+        for i in 0..num_recs {
+            index.before_first(&Value::Int(i));
+
+            if i % 5 == 0 {
+                assert!(!index.next());
+            } else {
+                assert!(index.next());
+                assert_eq!(
+                    index.get_rid(),
+                    Some(RID::new(i as u64 / 100, i as i16 % 100))
+                );
+                assert!(!index.next());
+            }
+        }
+    }
+
+    #[test]
+    fn test_btree_index_duplicates() {
+        let dir = tempdir().unwrap();
+        let db = test_db(&dir);
+
+        let tx = Arc::new(Mutex::new(db.new_tx()));
+
+        let leaf_layout = Layout::from_schema(make_schema! {
+            "dataval" => i32,
+            "block" => i32,
+            "id" => i32
+        });
+
+        let mut index = BTreeIndex::new(tx, "test-idx", leaf_layout);
+
+        for i in 0..25 {
+            //add duplicate values
+            if i % 6 == 0 {
+                for j in 0..8 {
+                    //println!("inserting {}", i * 100 + j);
+                    index.insert(&Value::Int(i), RID::new(i as u64, 0 as i16));
+                }
+            } else {
+                index.insert(&Value::Int(i), RID::new(i as u64, 0));
+            }
+        }
+
+        index.generate_dot_file("graph.dot");
+
+        for i in 0..25 {
+            index.before_first(&Value::Int(i));
+
+            let repetitions = if i % 6 == 0 { 8 } else { 1 };
+
+            for j in 0..repetitions {
+                assert!(index.next());
+                assert_eq!(index.get_rid(), Some(RID::new(i as u64, 0 as i16)));
+            }
+
+            assert!(!index.next());
+        }
     }
 }

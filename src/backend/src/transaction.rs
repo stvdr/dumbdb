@@ -13,10 +13,17 @@ use tracing::{
 };
 
 use crate::{
-    block_id::BlockId, buffer::Buffer, buffer_list::BufferList, buffer_manager::BufferManager,
-    concurrency_manager::ConcurrencyManager, eviction_policy::SimpleEvictionPolicy,
-    file_manager::FileManager, lock_table::LockTable, log_manager::LogManager,
-    log_record::LogRecord, page::Page,
+    block_id::BlockId,
+    buffer::Buffer,
+    buffer_list::BufferList,
+    buffer_manager::BufferManager,
+    concurrency_manager::ConcurrencyManager,
+    eviction_policy::SimpleEvictionPolicy,
+    file_manager::FileManager,
+    lock_table::LockTable,
+    log_manager::LogManager,
+    log_record::LogRecord,
+    page::{Page, PAGE_SIZE},
 };
 
 static NEXT_TRANSACTION_NUM: AtomicI64 = AtomicI64::new(0);
@@ -246,6 +253,15 @@ impl Tx {
         let buff = self.buffer_list.lock().unwrap().get_buffer(blk);
         let val = buff.read().unwrap().page.read(offset);
         val
+    }
+
+    pub fn action_on_raw_page(&mut self, blk: &BlockId, action: fn(&Page) -> ()) {
+        self.concurrency_mgr.slock(blk);
+        let buff = self.buffer_list.lock().unwrap().get_buffer(blk);
+        {
+            let buff = buff.read().unwrap();
+            action(&buff.page);
+        }
     }
 
     /// Get a string from the specified block.

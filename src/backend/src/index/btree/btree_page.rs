@@ -29,6 +29,10 @@ impl BTPage {
         }
     }
 
+    pub fn block(&self) -> BlockId {
+        self.current_blk.clone()
+    }
+
     pub fn find_slot_before(&self, key: &Value) -> i32 {
         let mut slot = 0;
         while slot < self.get_num_records() && self.get_data_val(slot) < *key {
@@ -50,9 +54,16 @@ impl BTPage {
     /// * `flag` - The flag that should be set on the new page that is created with ~half of the
     /// records.
     pub fn split(&mut self, split_pos: u32, flag: i32) -> BlockId {
+        println!(
+            "split leaf at split_pos: {} with flag: {} with cur num records {}",
+            split_pos,
+            flag,
+            self.get_num_records()
+        );
         let new_blk = self.append_new(flag);
         let mut new_page = BTPage::new(self.tx.clone(), new_blk.clone(), self.layout.clone());
         self.transfer_records(split_pos, &mut new_page);
+        println!("setting flag {} on new page", flag);
         new_page.set_flag(flag);
         new_blk.clone()
     }
@@ -67,8 +78,8 @@ impl BTPage {
     }
 
     pub fn format(&self, blk: &BlockId, flag: i32, tx: &mut Tx) {
-        tx.set_int(&self.current_blk, 0, flag as i32, false);
-        tx.set_int(&self.current_blk, size_of::<Flag>(), 0, false);
+        tx.set_int(&blk, 0, flag as i32, false);
+        tx.set_int(&blk, size_of::<Flag>(), 0, false);
         let recsize = self.layout.slot_size();
     }
 
@@ -88,6 +99,7 @@ impl BTPage {
 
     /// Set the number of records currently stored in this page.
     fn set_num_records(&self, n: u32) {
+        println!("setting number of records to {}", n);
         self.tx
             .lock()
             .unwrap()
@@ -96,10 +108,15 @@ impl BTPage {
 
     /// Get the number of records currently stored in the page
     pub fn get_num_records(&self) -> u32 {
-        self.tx
-            .lock()
-            .unwrap()
-            .get_int(&self.current_blk, size_of::<Flag>() as usize) as u32
+        let num_records =
+            self.tx
+                .lock()
+                .unwrap()
+                .get_int(&self.current_blk, size_of::<Flag>() as usize) as u32;
+
+        println!("got num records: {}", num_records);
+
+        num_records
     }
 
     pub fn set_flag(&self, val: i32) {
@@ -161,14 +178,23 @@ impl BTPage {
     /// * `slot` - The first slot that will be transferred.
     /// * `dest` - The destination page where records will be transferred.
     fn transfer_records(&mut self, slot: u32, dest: &mut BTPage) {
+        println!("transferring records starting at slot {}", slot);
         let mut slot = slot;
         let mut dest_slot = 0;
+        println!(
+            "slot: {}, dest_slot: {}, num_recs: {}",
+            slot,
+            dest_slot,
+            self.get_num_records()
+        );
         while slot < self.get_num_records() {
+            println!("inserting into destination at slot {}", dest_slot);
             dest.insert(dest_slot);
             let schema = self.layout.schema();
             for fld in schema.fields() {
                 dest.set_val(dest_slot, &fld, &self.get_val(slot, &fld));
             }
+            println!("deleting slot {}", slot);
             self.delete(slot);
             dest_slot += 1;
         }
@@ -177,6 +203,7 @@ impl BTPage {
     /// Inserts a new record into the page at the provided slot by first shifting all records
     /// in [slot..] to the right by 1.
     fn insert(&mut self, slot: u32) {
+        println!("inserting at slot {}", slot);
         let mut i = self.get_num_records();
         while i > slot {
             self.copy_record(i - 1, i);
