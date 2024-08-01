@@ -97,6 +97,16 @@ impl ReadTypeFromPage<'_> for String {
     }
 }
 
+//impl ReadTypeFromPage<'_> for bool {
+//    fn read(page: &'_ Page, offset: usize) -> Self {
+//        i8::read(&page, offset) == 1
+//    }
+//}
+
+impl_endian_io_traits!(f32, write_f32, read_f32);
+impl_endian_io_traits!(f64, write_f64, read_f64);
+//impl_endian_io_traits!(u8, write_u8, read_u8);
+//impl_endian_io_traits!(i8, write_i8, read_i8);
 impl_endian_io_traits!(u16, write_u16, read_u16);
 impl_endian_io_traits!(i16, write_i16, read_i16);
 impl_endian_io_traits!(u32, write_u32, read_u32);

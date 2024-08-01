@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
-use crate::{block_id::BlockId, layout::Layout, transaction::Tx};
+use crate::{block_id::BlockId, layout::Layout, page::Page, transaction::Tx};
 
 // TODO: slot should be a type
 
@@ -22,6 +22,10 @@ impl RecordPage {
             blk,
             layout,
         }
+    }
+
+    pub fn get_page(&self) -> Arc<RwLock<Page>> {
+        self.tx.lock().unwrap()
     }
 
     /// Get the block number of the underlying page.

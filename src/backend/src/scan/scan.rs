@@ -1,4 +1,4 @@
-use crate::{parser::constant::Value, rid::RID};
+use crate::{parser::constant::Value, rid::RID, tuple::Tuple};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Error {
@@ -15,23 +15,24 @@ pub trait Scan {
     fn before_first(&mut self);
 
     fn next(&mut self) -> bool;
-    fn get_int(&self, field_name: &str) -> ScanResult<i32>;
-    fn get_string(&self, field_name: &str) -> ScanResult<String>;
-    fn get_val(&self, field_name: &str) -> ScanResult<Value>;
-    fn has_field(&self, field_name: &str) -> bool;
+    fn get_tuple(&self) -> ScanResult<Tuple>;
+    //fn get_int(&self, field_name: &str) -> ScanResult<i32>;
+    //fn get_string(&self, field_name: &str) -> ScanResult<String>;
+    //fn get_val(&self, field_name: &str) -> ScanResult<Value>;
+    //fn has_field(&self, field_name: &str) -> bool;
 
     // Update support
-    fn set_int(&mut self, field_name: &str, val: i32) -> ScanResult<()> {
-        Err(Error::UpdateNotSupported)
-    }
+    //fn set_int(&mut self, field_name: &str, val: i32) -> ScanResult<()> {
+    //    Err(Error::UpdateNotSupported)
+    //}
 
-    fn set_string(&mut self, field_name: &str, val: &str) -> ScanResult<()> {
-        Err(Error::UpdateNotSupported)
-    }
+    //fn set_string(&mut self, field_name: &str, val: &str) -> ScanResult<()> {
+    //    Err(Error::UpdateNotSupported)
+    //}
 
-    fn set_val(&mut self, field_name: &str, val: &Value) -> ScanResult<()> {
-        Err(Error::UpdateNotSupported)
-    }
+    //fn set_val(&mut self, field_name: &str, val: &Value) -> ScanResult<()> {
+    //    Err(Error::UpdateNotSupported)
+    //}
 
     fn insert(&mut self) -> ScanResult<()> {
         Err(Error::UpdateNotSupported)

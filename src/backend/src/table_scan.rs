@@ -10,6 +10,7 @@ use crate::{
     rid::RID,
     scan::scan::{Error, Scan, ScanResult},
     transaction::Tx,
+    tuple::Tuple,
 };
 
 pub struct TableScan {
@@ -45,56 +46,61 @@ impl Scan for TableScan {
         self.move_to_block(0);
     }
 
-    fn get_int(&self, field_name: &str) -> ScanResult<i32> {
-        if !self.has_field(field_name) {
-            Err(Error::NonExistentField(field_name.to_string()))
-        } else {
-            Ok(self.record_page.get_int(self.current_slot, field_name))
-        }
+    fn get_tuple(&self) -> ScanResult<Tuple> {
+        let page = self.record_page
+        Ok(Tuple::new(
     }
 
-    fn get_string(&self, field_name: &str) -> ScanResult<String> {
-        if !self.has_field(field_name) {
-            Err(Error::NonExistentField(field_name.to_string()))
-        } else {
-            Ok(self.record_page.get_string(self.current_slot, field_name))
-        }
-    }
+    //fn get_int(&self, field_name: &str) -> ScanResult<i32> {
+    //    if !self.has_field(field_name) {
+    //        Err(Error::NonExistentField(field_name.to_string()))
+    //    } else {
+    //        Ok(self.record_page.get_int(self.current_slot, field_name))
+    //    }
+    //}
 
-    fn get_val(&self, field_name: &str) -> ScanResult<Value> {
-        match self.layout.schema().get_field_type(field_name) {
-            Some(0) => self.get_int(field_name).map(Value::Int),
-            Some(1) => self.get_string(field_name).map(Value::Varchar),
-            _ => Err(Error::NonExistentField(field_name.to_string())),
-        }
-    }
+    //fn get_string(&self, field_name: &str) -> ScanResult<String> {
+    //    if !self.has_field(field_name) {
+    //        Err(Error::NonExistentField(field_name.to_string()))
+    //    } else {
+    //        Ok(self.record_page.get_string(self.current_slot, field_name))
+    //    }
+    //}
 
-    fn has_field(&self, field_name: &str) -> bool {
-        self.layout.schema().has_field(field_name)
-    }
+    //fn get_val(&self, field_name: &str) -> ScanResult<Value> {
+    //    match self.layout.schema().get_field_type(field_name) {
+    //        Some(0) => self.get_int(field_name).map(Value::Int),
+    //        Some(1) => self.get_string(field_name).map(Value::Varchar),
+    //        _ => Err(Error::NonExistentField(field_name.to_string())),
+    //    }
+    //}
 
-    fn set_int(&mut self, field_name: &str, val: i32) -> ScanResult<()> {
-        self.record_page.set_int(self.current_slot, field_name, val);
-        Ok(())
-    }
+    //fn has_field(&self, field_name: &str) -> bool {
+    //    self.layout.schema().has_field(field_name)
+    //}
 
-    fn set_string(&mut self, field_name: &str, val: &str) -> ScanResult<()> {
-        self.record_page
-            .set_string(self.current_slot, field_name, val);
-        Ok(())
-    }
+    //fn set_int(&mut self, field_name: &str, val: i32) -> ScanResult<()> {
+    //    self.record_page.set_int(self.current_slot, field_name, val);
+    //    Ok(())
+    //}
 
-    fn set_val(&mut self, field_name: &str, val: &Value) -> ScanResult<()> {
-        //self.record_page.set
-        match val {
-            Value::Int(i) => self.record_page.set_int(self.current_slot, field_name, *i),
-            Value::Varchar(s) => self
-                .record_page
-                .set_string(self.current_slot, field_name, s),
-        }
+    //fn set_string(&mut self, field_name: &str, val: &str) -> ScanResult<()> {
+    //    self.record_page
+    //        .set_string(self.current_slot, field_name, val);
+    //    Ok(())
+    //}
 
-        Ok(())
-    }
+    //fn set_val(&mut self, field_name: &str, val: &Value) -> ScanResult<()> {
+    //    //self.record_page.set
+    //    match val {
+    //        Value::Int(i) => self.record_page.set_int(self.current_slot, field_name, *i),
+    //        Value::Varchar(s) => self
+    //            .record_page
+    //            .set_string(self.current_slot, field_name, s),
+    //    }
+
+    //    Ok(())
+    //}
 
     /// Move to the next slot available for insertion and mark it USED.
     ///

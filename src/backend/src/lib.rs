@@ -33,3 +33,4 @@ mod metadata;
 mod parser;
 mod planning;
 mod scan;
+pub mod tuple;

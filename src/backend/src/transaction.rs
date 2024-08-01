@@ -1,13 +1,16 @@
-use std::sync::{
-    atomic::{AtomicI64, AtomicU64},
-    Arc, Mutex,
+use std::{
+    alloc::Layout,
+    sync::{
+        atomic::{AtomicI64, AtomicU64},
+        Arc, Mutex,
+    },
 };
 
 use crate::{
     block_id::BlockId, buffer::Buffer, buffer_list::BufferList, buffer_manager::BufferManager,
     concurrency_manager::ConcurrencyManager, eviction_policy::SimpleEvictionPolicy,
     file_manager::FileManager, lock_table::LockTable, log_manager::LogManager,
-    log_record::LogRecord, page::Page,
+    log_record::LogRecord, page::Page, tuple::Tuple,
 };
 
 static NEXT_TRANSACTION_NUM: AtomicI64 = AtomicI64::new(0);
@@ -220,6 +223,12 @@ impl Tx {
 
         // TODO: error handling
         self.file_mgr.append_block(file_id, &Page::new()).unwrap()
+    }
+
+    pub fn get_tuple(&mut self, blk: &BlockId, offset: usize, layout: &Layout) -> Tuple {
+        self.concurrency_mgr.slock(blk);
+        let buff = self.buffer_list.lock().unwrap().get_buffer(blk).clone();
+        Tuple::new(buff, offset, layout)
     }
 
     /// Get an integer from the specified block.

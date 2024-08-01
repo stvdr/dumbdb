@@ -42,6 +42,26 @@ impl Datum<'_> {
         Datum::Int(p.read(offset))
     }
 
+    pub fn from_page_smallint(p: &Page, offset: usize) -> Datum {
+        Datum::SmallInt(p.read(offset))
+    }
+
+    pub fn from_page_bigint(p: &Page, offset: usize) -> Datum {
+        Datum::BigInt(p.read(offset))
+    }
+
+    //pub fn from_page_bool(p: &Page, offset: usize) -> Datum {
+    //    Datum::Bool(p.read(offset))
+    //}
+
+    pub fn from_page_real(p: &Page, offset: usize) -> Datum {
+        Datum::Real(p.read(offset))
+    }
+
+    pub fn from_page_double(p: &Page, offset: usize) -> Datum {
+        Datum::Double(p.read(offset))
+    }
+
     pub fn from_page_varchar(p: &Page, offset: usize) -> Datum {
         //p.read_bytes()
         Datum::Varchar(p.read(offset))
