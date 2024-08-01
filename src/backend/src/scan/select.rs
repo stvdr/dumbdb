@@ -3,11 +3,12 @@ use crate::{
     rid::RID,
 };
 
-use super::scan::{Scan, ScanResult};
+use super::scan::{Scan, ScanResult, Scannable, UpdateScannable};
 
 pub struct SelectScan {
     predicate: Predicate,
-    scan: Box<dyn Scan>,
+    scan: Box<Scan>,
+    //scan: Box<dyn Scan>,
 }
 
 impl SelectScan {
@@ -18,12 +19,12 @@ impl SelectScan {
     /// * `predicate` - A predicate that will be applied to each record in the underlying scan.
     ///     Only records that satisfy the predicate will be returned by this scan.
     /// * `scan` - The `Scan` underlying this `SelectScan`.
-    pub fn new(predicate: Predicate, scan: Box<dyn Scan>) -> Self {
+    pub fn new(predicate: Predicate, scan: Box<Scan>) -> Self {
         Self { predicate, scan }
     }
 }
 
-impl Scan for SelectScan {
+impl Scannable for SelectScan {
     fn before_first(&mut self) {
         self.scan.before_first();
     }
@@ -59,39 +60,35 @@ impl Scan for SelectScan {
     fn close(&mut self) {
         self.scan.close()
     }
+}
 
-    fn set_int(&mut self, field_name: &str, val: i32) -> ScanResult<()> {
-        self.scan.set_int(field_name, val)?;
-        Ok(())
+impl UpdateScannable for SelectScan {
+    fn set_int(&mut self, field_name: &str, val: i32) {
+        self.scan.set_int(field_name, val);
     }
 
-    fn set_string(&mut self, field_name: &str, val: &str) -> ScanResult<()> {
-        self.scan.set_string(field_name, val)?;
-        Ok(())
+    fn set_string(&mut self, field_name: &str, val: &str) {
+        self.scan.set_string(field_name, val);
     }
 
-    fn set_val(&mut self, field_name: &str, val: &Value) -> ScanResult<()> {
-        self.scan.set_val(field_name, val)?;
-        Ok(())
+    fn set_val(&mut self, field_name: &str, val: &Value) {
+        self.scan.set_val(field_name, val);
     }
 
-    fn insert(&mut self) -> ScanResult<()> {
-        self.scan.insert()?;
-        Ok(())
+    fn insert(&mut self) {
+        self.scan.insert();
     }
 
-    fn delete(&mut self) -> ScanResult<()> {
-        self.scan.delete()?;
-        Ok(())
+    fn delete(&mut self) {
+        self.scan.delete();
     }
 
-    fn get_rid(&self) -> ScanResult<RID> {
-        Ok(self.scan.get_rid()?)
+    fn get_rid(&self) -> RID {
+        self.scan.get_rid()
     }
 
-    fn move_to_rid(&mut self, rid: RID) -> ScanResult<()> {
-        self.scan.move_to_rid(rid)?;
-        Ok(())
+    fn move_to_rid(&mut self, rid: RID) {
+        self.scan.move_to_rid(rid);
     }
 }
 
@@ -104,7 +101,7 @@ mod tests {
     use crate::{
         metadata::metadata_manager::MetadataManager,
         parser::{constant::Value, expression::Expression, predicate::Predicate, term::Term},
-        scan::scan::Scan,
+        scan::scan::{Scan, Scannable},
         table_scan::TableScan,
         tests::test_utils::{create_default_tables, default_test_db},
     };
@@ -128,8 +125,8 @@ mod tests {
         let mut predicate = Predicate::from_term(t1);
 
         let table_layout = metadata_manager.get_table_layout("student", &tx).unwrap();
-        let mut table_scan = Box::new(TableScan::new(tx.clone(), table_layout, "student"));
-        let mut select_scan = SelectScan::new(predicate.clone(), table_scan);
+        let mut table_scan = TableScan::new(tx.clone(), table_layout, "student");
+        let mut select_scan = SelectScan::new(predicate.clone(), &mut table_scan);
 
         assert!(select_scan.next());
         assert_eq!(select_scan.get_int("sid").unwrap(), 1);

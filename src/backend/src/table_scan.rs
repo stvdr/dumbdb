@@ -8,7 +8,7 @@ use crate::{
     parser::constant::Value,
     record_page::RecordPage,
     rid::RID,
-    scan::scan::{Error, Scan, ScanResult},
+    scan::scan::{ScanError, ScanResult, Scannable, UpdateScannable},
     transaction::Tx,
 };
 
@@ -21,7 +21,7 @@ pub struct TableScan {
     is_closed: bool,
 }
 
-impl Scan for TableScan {
+impl Scannable for TableScan {
     /// Move to the next record.
     ///
     /// Iterate through all records in a table. Each call to `next` will find the next slot with a
@@ -45,9 +45,9 @@ impl Scan for TableScan {
         self.move_to_block(0);
     }
 
-    fn get_int(&self, field_name: &str) -> ScanResult<i32> {
+    fn get_int(&self, field_name: &str) -> i32 {
         if !self.has_field(field_name) {
-            Err(Error::NonExistentField(field_name.to_string()))
+            Err(ScanError::NonExistentField(field_name.to_string()))
         } else {
             Ok(self.record_page.get_int(self.current_slot, field_name))
         }
@@ -55,7 +55,7 @@ impl Scan for TableScan {
 
     fn get_string(&self, field_name: &str) -> ScanResult<String> {
         if !self.has_field(field_name) {
-            Err(Error::NonExistentField(field_name.to_string()))
+            Err(ScanError::NonExistentField(field_name.to_string()))
         } else {
             Ok(self.record_page.get_string(self.current_slot, field_name))
         }
@@ -65,7 +65,7 @@ impl Scan for TableScan {
         match self.layout.schema().get_field_type(field_name) {
             Some(0) => self.get_int(field_name).map(Value::Int),
             Some(1) => self.get_string(field_name).map(Value::Varchar),
-            _ => Err(Error::NonExistentField(field_name.to_string())),
+            _ => Err(ScanError::NonExistentField(field_name.to_string())),
         }
     }
 
@@ -73,18 +73,25 @@ impl Scan for TableScan {
         self.layout.schema().has_field(field_name)
     }
 
-    fn set_int(&mut self, field_name: &str, val: i32) -> ScanResult<()> {
+    fn close(&mut self) {
+        if !self.is_closed {
+            self.tx.lock().unwrap().unpin(&self.record_page.block());
+            self.is_closed = true;
+        }
+    }
+}
+
+impl UpdateScannable for TableScan {
+    fn set_int(&mut self, field_name: &str, val: i32) {
         self.record_page.set_int(self.current_slot, field_name, val);
-        Ok(())
     }
 
-    fn set_string(&mut self, field_name: &str, val: &str) -> ScanResult<()> {
+    fn set_string(&mut self, field_name: &str, val: &str) {
         self.record_page
             .set_string(self.current_slot, field_name, val);
-        Ok(())
     }
 
-    fn set_val(&mut self, field_name: &str, val: &Value) -> ScanResult<()> {
+    fn set_val(&mut self, field_name: &str, val: &Value) {
         //self.record_page.set
         match val {
             Value::Int(i) => self.record_page.set_int(self.current_slot, field_name, *i),
@@ -92,15 +99,13 @@ impl Scan for TableScan {
                 .record_page
                 .set_string(self.current_slot, field_name, s),
         }
-
-        Ok(())
     }
 
     /// Move to the next slot available for insertion and mark it USED.
     ///
     /// If there is no slot available in the current `RecordPage`, creates a new `RecordPage` and
     /// uses the first slot there.
-    fn insert(&mut self) -> ScanResult<()> {
+    fn insert(&mut self) {
         self.current_slot = self.record_page.insert_after(self.current_slot);
 
         while self.current_slot == -1 {
@@ -112,34 +117,21 @@ impl Scan for TableScan {
 
             self.current_slot = self.record_page.insert_after(self.current_slot);
         }
-
-        Ok(())
     }
 
-    fn delete(&mut self) -> ScanResult<()> {
+    fn delete(&mut self) {
         self.record_page.delete(self.current_slot);
-
-        Ok(())
     }
 
-    fn move_to_rid(&mut self, rid: RID) -> ScanResult<()> {
+    fn move_to_rid(&mut self, rid: RID) {
         self.close();
         let blk = BlockId::new(&self.file_name, rid.block_num());
         self.record_page = RecordPage::new(self.tx.clone(), blk, self.layout.clone());
         self.current_slot = rid.slot();
-
-        Ok(())
     }
 
-    fn get_rid(&self) -> ScanResult<RID> {
-        Ok(RID::new(self.record_page.block_number(), self.current_slot))
-    }
-
-    fn close(&mut self) {
-        if !self.is_closed {
-            self.tx.lock().unwrap().unpin(&self.record_page.block());
-            self.is_closed = true;
-        }
+    fn get_rid(&self) {
+        RID::new(self.record_page.block_number(), self.current_slot)
     }
 }
 

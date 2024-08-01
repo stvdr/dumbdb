@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{scan::scan::Scan, schema::Schema};
+use crate::{scan::scan::Scannable, schema::Schema};
 
 use super::{constant::Value, parser::FieldName};
 
@@ -11,7 +11,7 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub fn evaluate(&self, scan: &dyn Scan) -> Value {
+    pub fn evaluate(&self, scan: &dyn Scannable) -> Value {
         // TODO: error checking
         match &self {
             Self::Field(field_name) => scan

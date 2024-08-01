@@ -2,22 +2,22 @@ use std::collections::HashSet;
 
 use crate::parser::constant::Value;
 
-use super::scan::{Error, Scan, ScanResult};
+use super::scan::{Scan, ScanError, ScanResult, Scannable};
 
 pub struct ProjectScan {
     field_list: Vec<String>,
-    scan: Box<dyn Scan>,
+    scan: Box<Scan>,
 }
 
 impl ProjectScan {
-    pub fn new(field_list: Vec<String>, scan: Box<dyn Scan>) -> Self {
+    pub fn new(field_list: Vec<String>, scan: Box<Scan>) -> Self {
         let mut s = Self { field_list, scan };
         s.before_first();
         s
     }
 }
 
-impl Scan for ProjectScan {
+impl Scannable for ProjectScan {
     fn before_first(&mut self) {
         self.scan.before_first();
     }
@@ -29,7 +29,7 @@ impl Scan for ProjectScan {
     // TODO: learn / figure out what the Result should look like
     fn get_int(&self, field_name: &str) -> ScanResult<i32> {
         if !self.has_field(field_name) {
-            Err(Error::NonExistentField(field_name.to_string()))
+            Err(ScanError::NonExistentField(field_name.to_string()))
         } else {
             self.scan.get_int(field_name)
         }
@@ -37,7 +37,7 @@ impl Scan for ProjectScan {
 
     fn get_string(&self, field_name: &str) -> ScanResult<String> {
         if !self.has_field(field_name) {
-            Err(Error::NonExistentField(field_name.to_string()))
+            Err(ScanError::NonExistentField(field_name.to_string()))
         } else {
             self.scan.get_string(field_name)
         }
@@ -67,7 +67,7 @@ mod tests {
 
     use crate::{
         metadata::metadata_manager::MetadataManager,
-        scan::scan::Scan,
+        scan::scan::{Scan, Scannable},
         table_scan::TableScan,
         tests::test_utils::{create_default_tables, default_test_db},
     };
@@ -83,14 +83,14 @@ mod tests {
         let tx = Arc::new(Mutex::new(db.new_tx()));
         let meta_mgr = MetadataManager::new(&tx);
 
-        let scan = Box::new(TableScan::new(
+        let mut scan = TableScan::new(
             tx.clone(),
             meta_mgr.get_table_layout("student", &tx).unwrap(),
             "student",
-        ));
+        );
 
         let mut project_scan =
-            ProjectScan::new(vec!["sid".to_string(), "grad_year".to_string()], scan);
+            ProjectScan::new(vec!["sid".to_string(), "grad_year".to_string()], &mut scan);
 
         let mut num_students = 0;
         while project_scan.next() {

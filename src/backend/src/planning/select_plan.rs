@@ -2,7 +2,10 @@ use std::fmt::Display;
 
 use crate::{
     parser::predicate::Predicate,
-    scan::{scan::Scan, select::SelectScan},
+    scan::{
+        scan::{Scan, UpdateScannable},
+        select::SelectScan,
+    },
     schema::Schema,
 };
 
@@ -20,9 +23,15 @@ impl SelectPlan {
 }
 
 impl Plan for SelectPlan {
-    fn open(&mut self) -> Box<dyn Scan> {
+    fn open(&mut self) -> Scan {
         let scan = self.plan.open();
-        Box::new(SelectScan::new(self.predicate.clone(), scan))
+
+        match scan {
+            Scan::Select(scan) => Scan::Select(SelectScan::new(self.predicate.clone(), &mut scan)),
+            Scan::Update(uscan) => {
+                Scan::Update(SelectScan::new(self.predicate.clone(), &mut uscan))
+            }
+        }
     }
 
     fn blocks_accessed(&self) -> u64 {

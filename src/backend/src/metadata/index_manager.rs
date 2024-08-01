@@ -1,7 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    layout::Layout, scan::scan::Scan, schema::Schema, table_scan::TableScan, transaction::Tx,
+    index::btree::btree_index::BTreeIndex, layout::Layout, scan::scan::Scan, schema::Schema,
+    table_scan::TableScan, transaction::Tx,
 };
 
 use super::{
@@ -34,24 +35,27 @@ impl IndexInfo {
         }
     }
 
-    // TODO: update after index definitions exist
-    //pub fn open(&self) -> HashIndex {
-    //    HashIndex {}
-    //}
+    // TODO: return different types of indexes
+    pub fn open(&self) -> BTreeIndex {
+        BTreeIndex::new(self.tx.clone(), &self.name, self.layout.clone())
+    }
 
-    // TODO: update after index definitions exist
     pub fn blocks_accessed(&self) -> u64 {
-        return 0;
+        let recs_per_blk = self.tx.lock().unwrap().block_size() as u64 / self.layout.slot_size();
+        let num_blks = self.stat_info.records_output() / recs_per_blk;
+        BTreeIndex::search_cost(num_blks, recs_per_blk)
     }
 
-    // TODO: update after index definitions exist
     pub fn records_outputs(&self) -> u64 {
-        return 0;
+        self.stat_info.records_output() / self.stat_info.distinct_values(&self.field_name)
     }
 
-    // TODO: update after index definitions exist
     pub fn distinct_values(&self, field_name: &str) -> u64 {
-        return 0;
+        if self.field_name == field_name {
+            1
+        } else {
+            self.stat_info.distinct_values(field_name)
+        }
     }
 
     // TODO: update after index definitions exist

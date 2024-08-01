@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{planning::plan::Plan, scan::scan::Scan};
+use crate::{planning::plan::Plan, scan::scan::Scannable};
 
 use super::term::Term;
 
@@ -26,7 +26,7 @@ impl Predicate {
         self.terms.append(&mut other.terms);
     }
 
-    pub fn is_satisfied(&self, scan: &dyn Scan) -> bool {
+    pub fn is_satisfied(&self, scan: &dyn Scannable) -> bool {
         for t in &self.terms {
             if !t.is_satisfied(scan) {
                 return false;

@@ -1,21 +1,21 @@
 use crate::parser::constant::Value;
 
-use super::scan::{Scan, ScanResult};
+use super::scan::{Scan, ScanResult, Scannable};
 
 pub struct ProductScan {
-    left: Box<dyn Scan>,
-    right: Box<dyn Scan>,
+    left: Box<Scan>,
+    right: Box<Scan>,
 }
 
 impl ProductScan {
-    pub fn new(left: Box<dyn Scan>, right: Box<dyn Scan>) -> Self {
+    pub fn new(left: Box<Scan>, right: Box<Scan>) -> Self {
         let mut s = Self { left, right };
         s.before_first();
         s
     }
 }
 
-impl Scan for ProductScan {
+impl Scannable for ProductScan {
     fn before_first(&mut self) {
         self.left.before_first();
         self.left.next();
@@ -74,7 +74,7 @@ mod tests {
 
     use crate::{
         metadata::metadata_manager::MetadataManager,
-        scan::scan::Scan,
+        scan::scan::{Scan, Scannable},
         table_scan::TableScan,
         tests::test_utils::{create_default_tables, default_test_db},
     };
@@ -90,19 +90,19 @@ mod tests {
         let tx = Arc::new(Mutex::new(db.new_tx()));
         let meta_mgr = MetadataManager::new(&tx);
 
-        let mut left_scan = Box::new(TableScan::new(
+        let mut left_scan = TableScan::new(
             tx.clone(),
             meta_mgr.get_table_layout("student", &tx).unwrap(),
             "student",
-        ));
+        );
 
-        let mut right_scan = Box::new(TableScan::new(
+        let mut right_scan = TableScan::new(
             tx.clone(),
             meta_mgr.get_table_layout("dept", &tx).unwrap(),
             "dept",
-        ));
+        );
 
-        let mut product_scan = ProductScan::new(left_scan, right_scan);
+        let mut product_scan = ProductScan::new(&mut left_scan, &mut right_scan);
 
         for s in 1..10 {
             for d in [10, 20, 30].iter() {

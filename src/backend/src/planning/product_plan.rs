@@ -24,10 +24,15 @@ impl ProductPlan {
 }
 
 impl Plan for ProductPlan {
-    fn open(&mut self) -> Box<dyn Scan> {
+    fn open(&mut self) -> Scan {
         let mut s1 = self.p1.open();
         let mut s2 = self.p2.open();
-        Box::new(ProductScan::new(s1, s2))
+
+        //match s1 {
+        //    Scan::Select(scan) =>
+        //}
+        //
+        Scan::Select(&mut ProductScan::new(s1.as_scannable(), s2.as_scannable()))
     }
 
     fn blocks_accessed(&self) -> u64 {

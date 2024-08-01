@@ -1,5 +1,7 @@
 pub mod basic_query_planner;
 pub mod basic_update_planner;
+pub mod index_join_plan;
+pub mod index_select_plan;
 pub mod plan;
 pub mod planner;
 pub mod product_plan;

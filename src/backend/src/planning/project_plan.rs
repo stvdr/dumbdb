@@ -1,6 +1,12 @@
 use std::fmt::Display;
 
-use crate::{scan::project::ProjectScan, schema::Schema};
+use crate::{
+    scan::{
+        project::ProjectScan,
+        scan::{Scan, Scannable},
+    },
+    schema::Schema,
+};
 
 use super::plan::Plan;
 
@@ -20,9 +26,13 @@ impl ProjectPlan {
 }
 
 impl Plan for ProjectPlan {
-    fn open(&mut self) -> Box<dyn crate::scan::scan::Scan> {
+    fn open(&mut self) -> Scan {
         let mut scan = self.plan.open();
-        Box::new(ProjectScan::new(self.schema.fields(), scan))
+        match scan {
+            Scan::Select(scan) | Scan::Update(scan) => {
+                Scan::Select(&mut ProjectScan::new(self.schema.fields(), scan))
+            }
+        }
     }
 
     fn blocks_accessed(&self) -> u64 {

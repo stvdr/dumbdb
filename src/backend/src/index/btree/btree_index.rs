@@ -73,8 +73,8 @@ impl BTreeIndex {
         }
     }
 
-    pub fn search_cost(num_blocks: usize, rpb: usize) -> i32 {
-        1 + ((num_blocks as f64).log10() / (rpb as f64).log10()) as i32
+    pub fn search_cost(num_blocks: u64, rpb: u64) -> u64 {
+        1 + ((num_blocks as f64).log10() / (rpb as f64).log10()) as u64
     }
 
     pub fn generate_dot_file(&self, filename: &str) -> io::Result<()> {

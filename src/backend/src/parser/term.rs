@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{scan::scan::Scan, schema::Schema};
+use crate::{scan::scan::Scannable, schema::Schema};
 
 use super::expression::Expression;
 
@@ -15,7 +15,7 @@ impl Term {
         Self { lhs, rhs }
     }
 
-    pub fn is_satisfied(&self, scan: &dyn Scan) -> bool {
+    pub fn is_satisfied(&self, scan: &dyn Scannable) -> bool {
         let lhs_val = self.lhs.evaluate(scan);
         let rhs_val = self.rhs.evaluate(scan);
         lhs_val == rhs_val
