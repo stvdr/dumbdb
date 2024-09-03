@@ -3,7 +3,12 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use crate::{layout::Layout, scan::scan::Scan, table_scan::TableScan, transaction::Tx};
+use crate::{
+    layout::Layout,
+    scan::scan::{Scan, Scannable, UpdateScannable},
+    table_scan::TableScan,
+    transaction::Tx,
+};
 
 use super::table_manager::TableManager;
 
@@ -108,12 +113,7 @@ impl StatisticsManager {
         let mut scan = TableScan::new(tx.clone(), layout.clone(), tbl_name);
         while scan.next() {
             num_records += 1;
-            // TODO: error handling
-            num_blocks = scan
-                .get_rid()
-                .expect("failed updating stats for non-updateable scan")
-                .block_num()
-                + 1;
+            num_blocks = scan.get_rid().block_num() + 1;
         }
 
         StatisticsInfo::new(num_blocks, num_records)

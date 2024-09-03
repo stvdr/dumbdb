@@ -90,19 +90,19 @@ mod tests {
         let tx = Arc::new(Mutex::new(db.new_tx()));
         let meta_mgr = MetadataManager::new(&tx);
 
-        let mut left_scan = TableScan::new(
+        let mut left_scan = Box::new(Scan::Table(TableScan::new(
             tx.clone(),
             meta_mgr.get_table_layout("student", &tx).unwrap(),
             "student",
-        );
+        )));
 
-        let mut right_scan = TableScan::new(
+        let mut right_scan = Box::new(Scan::Table(TableScan::new(
             tx.clone(),
             meta_mgr.get_table_layout("dept", &tx).unwrap(),
             "dept",
-        );
+        )));
 
-        let mut product_scan = ProductScan::new(&mut left_scan, &mut right_scan);
+        let mut product_scan = ProductScan::new(left_scan, right_scan);
 
         for s in 1..10 {
             for d in [10, 20, 30].iter() {

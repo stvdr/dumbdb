@@ -27,12 +27,8 @@ impl ProjectPlan {
 
 impl Plan for ProjectPlan {
     fn open(&mut self) -> Scan {
-        let mut scan = self.plan.open();
-        match scan {
-            Scan::Select(scan) | Scan::Update(scan) => {
-                Scan::Select(&mut ProjectScan::new(self.schema.fields(), scan))
-            }
-        }
+        let mut scan = Box::new(self.plan.open());
+        Scan::Project(ProjectScan::new(self.schema.fields(), scan))
     }
 
     fn blocks_accessed(&self) -> u64 {

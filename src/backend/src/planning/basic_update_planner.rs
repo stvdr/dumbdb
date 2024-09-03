@@ -6,6 +6,7 @@ use crate::{
         CreateNode, DeleteNode, FieldDefinitions, InsertNode, SelectNode, UpdateNode,
     },
     planning::table_plan::TablePlan,
+    scan::scan::{Scannable, UpdateScannable},
     schema::Schema,
     transaction::Tx,
 };
@@ -107,7 +108,7 @@ impl UpdatePlanner for BasicUpdatePlanner {
         let mut scan = plan.open();
         let mut count = 0;
         while scan.next() {
-            let val = update.expr.evaluate(&*scan);
+            let val = update.expr.evaluate(&scan);
             scan.set_val(&update.field, &val);
             count += 1;
         }

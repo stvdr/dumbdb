@@ -1,8 +1,12 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    index::btree::btree_index::BTreeIndex, layout::Layout, scan::scan::Scan, schema::Schema,
-    table_scan::TableScan, transaction::Tx,
+    index::btree::btree_index::BTreeIndex,
+    layout::Layout,
+    scan::scan::{Scan, UpdateScannable},
+    schema::Schema,
+    table_scan::TableScan,
+    transaction::Tx,
 };
 
 use super::{

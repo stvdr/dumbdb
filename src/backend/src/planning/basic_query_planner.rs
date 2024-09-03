@@ -65,6 +65,7 @@ impl QueryPlanner for BasicQueryPlanner {
         let first_plan = iter
             .next()
             .ok_or_else(|| "unable to parse any plans".to_string())?;
+
         let mut plan = iter.fold(first_plan, |acc, next| {
             Box::new(ProductPlan::new(acc, next))
         });
@@ -108,6 +109,7 @@ mod tests {
             parser::{Parser, RootNode, SelectNode},
         },
         planning::query_planner::QueryPlanner,
+        scan::scan::Scannable,
         tests::test_utils::{create_default_tables, default_test_db, test_db},
     };
 

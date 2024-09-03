@@ -24,14 +24,9 @@ impl SelectPlan {
 
 impl Plan for SelectPlan {
     fn open(&mut self) -> Scan {
-        let scan = self.plan.open();
+        let scan = Box::new(self.plan.open());
 
-        match scan {
-            Scan::Select(scan) => Scan::Select(SelectScan::new(self.predicate.clone(), &mut scan)),
-            Scan::Update(uscan) => {
-                Scan::Update(SelectScan::new(self.predicate.clone(), &mut uscan))
-            }
-        }
+        Scan::Select(SelectScan::new(self.predicate.clone(), scan))
     }
 
     fn blocks_accessed(&self) -> u64 {

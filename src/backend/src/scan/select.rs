@@ -8,7 +8,6 @@ use super::scan::{Scan, ScanResult, Scannable, UpdateScannable};
 pub struct SelectScan {
     predicate: Predicate,
     scan: Box<Scan>,
-    //scan: Box<dyn Scan>,
 }
 
 impl SelectScan {
@@ -125,8 +124,12 @@ mod tests {
         let mut predicate = Predicate::from_term(t1);
 
         let table_layout = metadata_manager.get_table_layout("student", &tx).unwrap();
-        let mut table_scan = TableScan::new(tx.clone(), table_layout, "student");
-        let mut select_scan = SelectScan::new(predicate.clone(), &mut table_scan);
+        let table_scan = Box::new(Scan::Table(TableScan::new(
+            tx.clone(),
+            table_layout,
+            "student",
+        )));
+        let mut select_scan = SelectScan::new(predicate.clone(), table_scan);
 
         assert!(select_scan.next());
         assert_eq!(select_scan.get_int("sid").unwrap(), 1);

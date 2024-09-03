@@ -43,17 +43,11 @@ impl TablePlan {
 
 impl Plan for TablePlan {
     fn open(&mut self) -> Scan {
-        Scan::Update(&mut TableScan::new(
+        Scan::Table(TableScan::new(
             self.tx.clone(),
             self.layout.clone(),
             &self.tbl_name,
         ))
-
-        //Box::new(TableScan::new(
-        //    self.tx.clone(),
-        //    self.layout.clone(),
-        //    &self.tbl_name,
-        //))
     }
 
     fn blocks_accessed(&self) -> u64 {

@@ -45,7 +45,7 @@ impl Scannable for TableScan {
         self.move_to_block(0);
     }
 
-    fn get_int(&self, field_name: &str) -> i32 {
+    fn get_int(&self, field_name: &str) -> ScanResult<i32> {
         if !self.has_field(field_name) {
             Err(ScanError::NonExistentField(field_name.to_string()))
         } else {
@@ -130,7 +130,7 @@ impl UpdateScannable for TableScan {
         self.current_slot = rid.slot();
     }
 
-    fn get_rid(&self) {
+    fn get_rid(&self) -> RID {
         RID::new(self.record_page.block_number(), self.current_slot)
     }
 }
@@ -189,7 +189,7 @@ impl Drop for TableScan {
 #[macro_export]
 macro_rules! insert {
     ($scan:expr, $( ($($val:expr),*) ),*) => {{
-        use crate::scan::scan::{Scan};
+        use crate::scan::scan::{Scan, Scannable, UpdateScannable};
         use crate::parser::constant::{FromDynamic};
 
         let fields = $scan.get_layout().schema().fields();
@@ -210,7 +210,7 @@ macro_rules! insert {
 #[macro_export]
 macro_rules! assert_scan_results {
         ($scan:expr, $( ($($val:expr),*) ),*) => {{
-            use crate::scan::scan::{Scan};
+            use crate::scan::scan::{Scan, Scannable};
         use crate::parser::constant::{FromDynamic};
 
             let fields = $scan.get_layout().schema().fields();

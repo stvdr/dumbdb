@@ -83,14 +83,14 @@ mod tests {
         let tx = Arc::new(Mutex::new(db.new_tx()));
         let meta_mgr = MetadataManager::new(&tx);
 
-        let mut scan = TableScan::new(
+        let scan = Box::new(Scan::Table(TableScan::new(
             tx.clone(),
             meta_mgr.get_table_layout("student", &tx).unwrap(),
             "student",
-        );
+        )));
 
         let mut project_scan =
-            ProjectScan::new(vec!["sid".to_string(), "grad_year".to_string()], &mut scan);
+            ProjectScan::new(vec!["sid".to_string(), "grad_year".to_string()], scan);
 
         let mut num_students = 0;
         while project_scan.next() {

@@ -1,7 +1,11 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    layout::Layout, parser::constant::Value, rid::RID, scan::scan::Scan, table_scan::TableScan,
+    layout::Layout,
+    parser::constant::Value,
+    rid::RID,
+    scan::scan::{Scan, Scannable, UpdateScannable},
+    table_scan::TableScan,
     transaction::Tx,
 };
 
