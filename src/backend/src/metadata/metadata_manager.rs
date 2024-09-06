@@ -1,9 +1,12 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use crate::{layout::Layout, schema::Schema, transaction::Tx};
 
 use super::{
-    index_manager::IndexManager,
+    index_manager::{IndexInfo, IndexManager},
     stats_manager::{StatisticsInfo, StatisticsManager},
     table_manager::TableManager,
     view_manager::ViewManager,
@@ -76,6 +79,35 @@ impl MetadataManager {
         self.view_mgr.get_view_definition(view_name, tx)
     }
 
+    /// Create an index on a table's field.
+    ///
+    /// # Arguments
+    ///
+    /// * `idx_name` - The name of the new index.
+    /// * `tbl_name` - The table that has the field to be indexed.
+    /// * `field_name` - The name of the field to be indexed.
+    /// * `tx` - The transaction used to write necessary metadata.
+    pub fn create_index(
+        &self,
+        idx_name: &str,
+        tbl_name: &str,
+        field_name: &str,
+        tx: &Arc<Mutex<Tx>>,
+    ) -> Result<(), String> {
+        self.idx_mgr
+            .create_index(idx_name, tbl_name, field_name, tx.clone())
+    }
+
+    /// Get indexes for the specified table.
+    ///
+    /// # Arguments
+    ///
+    /// * `tbl_name` - The name of the table.
+    /// * `tx` - The transaction used to read metadata.
+    pub fn get_index_info(&self, tbl_name: &str, tx: Arc<Mutex<Tx>>) -> HashMap<String, IndexInfo> {
+        self.idx_mgr.get_index_info(tbl_name, tx)
+    }
+
     pub fn get_stat_info(
         &mut self,
         tbl_name: &str,
@@ -85,14 +117,4 @@ impl MetadataManager {
         let mut sm = self.stat_mgr.lock().unwrap();
         sm.get_stats(tbl_name, layout, tx)
     }
-
-    // TODO: complete index related metadata
-    //pub fn create_index<const P: usize>(
-    //    &self,
-    //    idx_name: &str,
-    //    tbl_name: &str,
-    //    field_name: &str,
-    //    tx: &Arc<Mutex<Transaction<P>>>,
-    //) {
-    //}
 }

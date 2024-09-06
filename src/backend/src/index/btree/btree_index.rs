@@ -207,13 +207,13 @@ impl Index for BTreeIndex {
         self.before_first(&key);
         // NOTE: we know that leaf is set at this point due to the above `before_first` call. Better way to design this?
         let leaf = self.leaf.as_mut().unwrap();
-        let e = leaf.insert(&rid);
+        let entry = leaf.insert(&rid);
         self.leaf = None;
 
-        if let Some(e) = e {
+        if let Some(entry) = entry {
             let mut root =
                 BTreeDirectory::new(self.tx.clone(), &self.rootblk, self.dir_layout.clone());
-            let e2 = root.insert(&e);
+            let e2 = root.insert(&entry);
             if let Some(e2) = e2 {
                 root.make_new_root(&e2);
             }
@@ -265,8 +265,7 @@ mod tests {
         let num_recs = 50;
 
         for i in 0..num_recs {
-            println!("inserting");
-            index.insert(&Value::Int(i), RID::new(i as u64 / 100, i as i16 % 100));
+            index.insert(&Value::Int(i), RID::new(i as u64 / 10, i as i16 % 10));
         }
 
         for i in 0..num_recs {
@@ -274,14 +273,14 @@ mod tests {
             assert!(index.next());
             assert_eq!(
                 index.get_rid(),
-                Some(RID::new(i as u64 / 100, i as i16 % 100))
+                Some(RID::new(i as u64 / 10, i as i16 % 10))
             );
         }
 
         // Test deletions
         for i in 0..num_recs {
             if i % 5 == 0 {
-                index.delete(&Value::Int(i), RID::new(i as u64 / 100, i as i16 % 100));
+                index.delete(&Value::Int(i), RID::new(i as u64 / 10, i as i16 % 10));
             }
         }
 
@@ -296,7 +295,7 @@ mod tests {
                 assert!(index.next());
                 assert_eq!(
                     index.get_rid(),
-                    Some(RID::new(i as u64 / 100, i as i16 % 100))
+                    Some(RID::new(i as u64 / 10, i as i16 % 10))
                 );
                 assert!(!index.next());
             }
@@ -322,7 +321,6 @@ mod tests {
             //add duplicate values
             if i % 6 == 0 {
                 for j in 0..8 {
-                    //println!("inserting {}", i * 100 + j);
                     index.insert(&Value::Int(i), RID::new(i as u64, 0 as i16));
                 }
             } else {

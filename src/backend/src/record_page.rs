@@ -38,8 +38,9 @@ impl RecordPage {
     pub fn get_int(&self, slot: i16, field_name: &str) -> i32 {
         assert!(
             self.get_flag(slot) == USED,
-            "the specified slot {} is not marked USED",
-            slot
+            "the specified slot {} in block {} is not marked USED",
+            slot,
+            self.blk,
         );
 
         let pos = self.offset(slot) + self.layout.offset(field_name) as usize;

@@ -7,8 +7,16 @@ use log::warn;
 use tempfile::{tempdir, TempDir};
 
 use crate::{
-    db::SimpleDB, insert, make_schema, metadata::metadata_manager::MetadataManager,
+    db::SimpleDB,
+    index::{btree::btree_index::BTreeIndex, index::Index},
+    insert,
+    layout::Layout,
+    make_schema,
+    metadata::metadata_manager::{self, MetadataManager},
+    parser::constant::FromDynamic,
+    scan::scan::{Scannable, UpdateScannable},
     table_scan::TableScan,
+    transaction::Tx,
 };
 
 /// Get a `SimpleDB` with log and data storage written into temporary directories.
@@ -87,6 +95,18 @@ pub fn create_default_tables(db: &mut SimpleDB) {
         (9, "lee", 2021, 10)
     ];
 
+    // Index the values in the student table
+    //meta_mgr.create_index()
+    populate_i32_index(
+        "student-idx",
+        "student",
+        meta_mgr.get_table_layout("student", &tx).unwrap(),
+        "sid",
+        tx.clone(),
+    );
+
+    meta_mgr.create_index("student-idx", "student", "sid", &tx);
+
     let mut scan = TableScan::new(
         tx.clone(),
         meta_mgr.get_table_layout("dept", &tx).unwrap(),
@@ -139,4 +159,30 @@ pub fn create_default_tables(db: &mut SimpleDB) {
     ];
 
     tx.lock().unwrap().commit();
+}
+
+fn populate_i32_index(
+    index_name: &str,
+    table_name: &str,
+    table_layout: Layout,
+    table_column_name: &str,
+    tx: Arc<Mutex<Tx>>,
+) {
+    //let tx = Arc::new(Mutex::new(db.new_tx()));
+    let leaf_layout = Layout::from_schema(make_schema! {
+        "dataval" => i32,
+        "block" => i32,
+        "id" => i32
+    });
+
+    let mut index = BTreeIndex::new(tx.clone(), index_name, leaf_layout);
+
+    // Populate the index
+    let mut scan = TableScan::new(tx.clone(), table_layout, table_name);
+    scan.before_first();
+    while scan.next() {
+        let val = scan.get_val(table_column_name).unwrap();
+        let rid = scan.get_rid();
+        index.insert(&val, rid);
+    }
 }

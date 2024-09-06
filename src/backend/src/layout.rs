@@ -2,6 +2,7 @@ use std::{collections::HashMap, mem};
 
 use crate::schema::Schema;
 
+// Space is allocated at the beginning for metadata, e.g. "inuse"
 static LAYOUT_START: u64 = mem::size_of::<u32>() as u64;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,5 +62,33 @@ impl Layout {
             1 => mem::size_of::<u64>() as u64 + (field_length * 1),
             _ => panic!("Unknown field type: {field_type}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::mem::size_of;
+
+    use crate::{layout::LAYOUT_START, make_schema};
+
+    use super::Layout;
+
+    #[test]
+    fn test_layout() {
+        let layout = Layout::from_schema(make_schema! {
+            "dataval" => i32,
+            "block" => i32,
+            "id" => i32
+        });
+
+        assert_eq!(layout.offset("dataval"), LAYOUT_START);
+        assert_eq!(
+            layout.offset("block"),
+            LAYOUT_START + TryInto::<u64>::try_into(size_of::<i32>()).unwrap()
+        );
+        assert_eq!(
+            layout.offset("id"),
+            LAYOUT_START + TryInto::<u64>::try_into(size_of::<i32>()).unwrap() * 2
+        );
     }
 }

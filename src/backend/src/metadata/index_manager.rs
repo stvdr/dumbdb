@@ -1,9 +1,12 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     index::btree::btree_index::BTreeIndex,
     layout::Layout,
-    scan::scan::{Scan, UpdateScannable},
+    scan::scan::{Scan, Scannable, UpdateScannable},
     schema::Schema,
     table_scan::TableScan,
     transaction::Tx,
@@ -24,17 +27,17 @@ pub struct IndexInfo {
 
 impl IndexInfo {
     fn new(
-        name: String,
-        field_name: String,
+        name: &str,
+        field_name: &str,
         tx: Arc<Mutex<Tx>>,
-        layout: Layout,
+        tbl_layout: &Layout,
         stat_info: StatisticsInfo,
     ) -> Self {
         Self {
-            name,
-            field_name,
+            name: name.to_string(),
+            field_name: field_name.to_string(),
+            layout: IndexInfo::create_index_layout(&tbl_layout, field_name),
             tx,
-            layout,
             stat_info,
         }
     }
@@ -62,30 +65,28 @@ impl IndexInfo {
         }
     }
 
-    // TODO: update after index definitions exist
-    pub fn create_index_layout(&self) -> Layout {
+    fn create_index_layout(tbl_layout: &Layout, field_name: &str) -> Layout {
         let mut schema = Schema::new();
-        schema.add_int_field("block");
-        schema.add_int_field("id");
 
         // TODO: field type should be an enum?
         // TODO: additional types
-        if self
-            .layout
+        if tbl_layout
             .schema()
-            .get_field_type(&self.field_name)
+            .get_field_type(field_name)
             .expect("field does not exist")
             == 0
         {
             schema.add_int_field("dataval");
         } else {
-            let len = self
-                .layout
+            let len = tbl_layout
                 .schema()
-                .get_field_length(&self.field_name)
+                .get_field_length(field_name)
                 .expect("field does not exist");
             schema.add_string_field("dataval", len);
         }
+
+        schema.add_int_field("block");
+        schema.add_int_field("id");
 
         Layout::from_schema(schema)
     }
@@ -113,28 +114,57 @@ impl IndexManager {
         s
     }
 
+    /// Create an index on the specified table/field.
     pub fn create_index(
         &self,
         idx_name: &str,
         tbl_name: &str,
         field_name: &str,
         tx: Arc<Mutex<Tx>>,
-    ) {
+    ) -> Result<(), String> {
         // TODO: verify that index does not already exist
         let mut scan = TableScan::new(tx, self.layout.clone(), "idxcat");
         scan.insert();
         scan.set_string("indexname", idx_name);
         scan.set_string("tablename", tbl_name);
         scan.set_string("fieldname", field_name);
+
+        // TODO: how can this always return Ok? Failure must be possible somewhere upstream..
+        Ok(())
     }
 
-    // TODO: figure this out once indexes actually exist. Not clear how transactions fit in here at
-    // the moment.
-    //pub fn get_index_info<const P: usize>(
-    //    &self,
-    //    idx_name: &str,
-    //    tx: Arc<Mutex<Transaction<P>>>,
-    //) -> Option<IndexInfo<P>> {
+    /// Gets index info for the specified table.
+    ///
+    /// # Arguments
+    ///
+    /// * `tbl_name` - The name of the table.
+    /// * `tx` - The transaction used to read from the metadata table.
+    pub fn get_index_info(&self, tbl_name: &str, tx: Arc<Mutex<Tx>>) -> HashMap<String, IndexInfo> {
+        let mut result = HashMap::new();
+        let mut scan = TableScan::new(tx.clone(), self.layout.clone(), "idxcat");
+        while scan.next() {
+            let table_name = scan.get_string("tablename").unwrap();
+            if table_name == tbl_name {
+                let index_name = scan.get_string("indexname").unwrap();
+                let field_name = scan.get_string("fieldname").unwrap();
+                let table_layout = self.tbl_mgr.get_table_layout(&table_name, &tx).unwrap();
+                let stats_info = self
+                    .stat_mgr
+                    .lock()
+                    .unwrap()
+                    .get_stats(&table_name, &table_layout, &tx)
+                    .unwrap();
+                let ii = IndexInfo::new(
+                    &index_name,
+                    &field_name,
+                    tx.clone(),
+                    &table_layout,
+                    stats_info,
+                );
+                result.insert(field_name, ii);
+            }
+        }
 
-    //}
+        result
+    }
 }
