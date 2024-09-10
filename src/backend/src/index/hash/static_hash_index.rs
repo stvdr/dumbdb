@@ -1,15 +1,14 @@
 use std::sync::{Arc, Mutex};
 
+use crate::index::index::{Hashable, Index};
 use crate::{
     layout::Layout,
     parser::constant::Value,
     rid::RID,
-    scan::scan::{Scan, Scannable, UpdateScannable},
+    scan::scan::{Scannable, UpdateScannable},
     table_scan::TableScan,
     transaction::Tx,
 };
-
-use super::index::{Hashable, Index};
 
 // TODO: this is modeled on the API from the text (pg. 321), but it doesn't feel like it fits well
 // into Rust. e.g. having the search_key & table_scan be Option types that change after calling
@@ -73,7 +72,7 @@ impl Index for StaticHashIndex {
         false
     }
 
-    fn get_rid(&self) -> Option<crate::rid::RID> {
+    fn get_rid(&self) -> Option<RID> {
         if let Some(ts) = &self.table_scan {
             // TODO: store correct integer sizes
             let block = ts.get_int("block").expect("could not read block num");
@@ -84,7 +83,7 @@ impl Index for StaticHashIndex {
         }
     }
 
-    fn insert(&mut self, key: &Value, rid: crate::rid::RID) {
+    fn insert(&mut self, key: &Value, rid: RID) {
         self.before_first(key);
         match &mut self.table_scan {
             Some(ts) => {

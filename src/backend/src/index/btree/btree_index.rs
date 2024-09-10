@@ -334,7 +334,7 @@ mod tests {
             }
         }
 
-        index.generate_dot_file("graph.dot");
+        //index.generate_dot_file("graph.dot");
 
         for i in 0..25 {
             index.before_first(&Value::Int(i));
