@@ -220,15 +220,21 @@ impl Index for BTreeIndex {
         }
     }
 
-    fn delete(&mut self, key: &Value, rid: RID) {
+    fn delete(&mut self, key: &Value, rid: &RID) {
         self.before_first(&key);
         let leaf = self.leaf.as_mut().unwrap();
-        leaf.delete(&rid);
+        leaf.delete(rid);
         self.leaf = None;
     }
 
     fn close(&mut self) {
         self.leaf = None;
+    }
+}
+
+impl Drop for BTreeIndex {
+    fn drop(&mut self) {
+        self.close();
     }
 }
 
@@ -280,11 +286,11 @@ mod tests {
         // Test deletions
         for i in 0..num_recs {
             if i % 5 == 0 {
-                index.delete(&Value::Int(i), RID::new(i as u64 / 10, i as i16 % 10));
+                index.delete(&Value::Int(i), &RID::new(i as u64 / 10, i as i16 % 10));
             }
         }
 
-        index.generate_dot_file("graph.dot");
+        //index.generate_dot_file("graph.dot");
 
         for i in 0..num_recs {
             index.before_first(&Value::Int(i));

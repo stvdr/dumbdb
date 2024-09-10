@@ -39,6 +39,7 @@ impl MetadataManager {
     /// * `tbl_name` - The name of the table.
     /// * `schema` - The table's schema.
     /// * `tx` - The transaction that table creation will run inside of.
+    // TODO: why return `bool`? Mke this return a result
     pub fn create_table(&self, tbl_name: &str, schema: &Schema, tx: &Arc<Mutex<Tx>>) -> bool {
         self.tbl_mgr.create_table(tbl_name, schema, tx)
     }

@@ -4,7 +4,7 @@ use crate::{
     parser::predicate::Predicate,
     scan::{
         scan::{Scan, UpdateScannable},
-        select::SelectScan,
+        select_scan::SelectScan,
     },
     schema::Schema,
 };

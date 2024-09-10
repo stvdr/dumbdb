@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use crate::{
-    scan::{product::ProductScan, scan::Scan},
+    scan::{product_scan::ProductScan, scan::Scan},
     schema::Schema,
 };
 

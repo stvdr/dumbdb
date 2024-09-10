@@ -20,6 +20,6 @@ pub trait Index {
     fn next(&mut self) -> bool;
     fn get_rid(&self) -> Option<RID>;
     fn insert(&mut self, key: &Value, rid: RID);
-    fn delete(&mut self, key: &Value, rid: RID);
+    fn delete(&mut self, key: &Value, rid: &RID);
     fn close(&mut self);
 }

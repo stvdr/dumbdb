@@ -10,3 +10,4 @@ pub mod query_planner;
 pub mod select_plan;
 pub mod table_plan;
 pub mod update_planner;
+mod index_update_planner;

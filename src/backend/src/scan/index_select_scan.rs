@@ -6,14 +6,18 @@ use crate::{
 use super::scan::{Scan, ScanResult, Scannable, UpdateScannable};
 
 pub struct IndexSelectScan {
-    scan: Box<TableScan>,
+    inner_scan: Box<TableScan>,
     idx: Box<dyn Index>,
     val: Value,
 }
 
 impl<'a> IndexSelectScan {
     pub fn new(scan: Box<TableScan>, idx: Box<dyn Index>, val: Value) -> Self {
-        Self { scan, idx, val }
+        Self {
+            inner_scan: scan,
+            idx,
+            val,
+        }
     }
 }
 
@@ -28,7 +32,7 @@ impl Scannable for IndexSelectScan {
         }
 
         if let Some(rid) = self.idx.get_rid() {
-            self.scan.move_to_rid(rid);
+            self.inner_scan.move_to_rid(rid);
             true
         } else {
             false
@@ -36,24 +40,24 @@ impl Scannable for IndexSelectScan {
     }
 
     fn get_int(&self, field_name: &str) -> ScanResult<i32> {
-        self.scan.get_int(field_name)
+        self.inner_scan.get_int(field_name)
     }
 
     fn get_string(&self, field_name: &str) -> ScanResult<String> {
-        self.scan.get_string(field_name)
+        self.inner_scan.get_string(field_name)
     }
 
     fn get_val(&self, field_name: &str) -> ScanResult<Value> {
-        self.scan.get_val(field_name)
+        self.inner_scan.get_val(field_name)
     }
 
     fn has_field(&self, field_name: &str) -> bool {
-        self.scan.has_field(field_name)
+        self.inner_scan.has_field(field_name)
     }
 
     fn close(&mut self) {
         self.idx.close();
-        self.scan.close();
+        self.inner_scan.close();
     }
 }
 

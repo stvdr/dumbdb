@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     scan::{
-        project::ProjectScan,
+        project_scan::ProjectScan,
         scan::{Scan, Scannable},
     },
     schema::Schema,

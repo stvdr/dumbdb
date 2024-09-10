@@ -21,6 +21,12 @@ impl RID {
     }
 }
 
+impl Clone for RID {
+    fn clone(&self) -> Self {
+        RID::new(self.block_num, self.slot)
+    }
+}
+
 impl Display for RID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "RID({},{})", self.block_num(), self.slot())

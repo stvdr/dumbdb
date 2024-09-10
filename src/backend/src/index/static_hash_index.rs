@@ -37,6 +37,12 @@ impl StaticHashIndex {
     }
 }
 
+impl Drop for StaticHashIndex {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
 impl Index for StaticHashIndex {
     fn before_first(&mut self, search_key: &Value) {
         self.close();
@@ -92,10 +98,10 @@ impl Index for StaticHashIndex {
         }
     }
 
-    fn delete(&mut self, key: &Value, rid: crate::rid::RID) {
+    fn delete(&mut self, key: &Value, rid: &RID) {
         self.before_first(key);
         while self.next() {
-            if let Some(r) = self.get_rid()
+            if let Some(r) = &self.get_rid()
                 && r == rid
             {
                 match &mut self.table_scan {
@@ -167,8 +173,8 @@ mod tests {
         assert_eq!(idx.get_rid(), Some(RID::new(34, 12)));
         assert!(!idx.next());
 
-        idx.delete(&Value::Int(15), RID::new(33, 12));
-        idx.delete(&Value::Int(100), RID::new(34, 12));
+        idx.delete(&Value::Int(15), &RID::new(33, 12));
+        idx.delete(&Value::Int(100), &RID::new(34, 12));
 
         idx.before_first(&Value::Int(13));
         assert!(idx.next());

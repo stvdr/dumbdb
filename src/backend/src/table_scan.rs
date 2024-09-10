@@ -207,8 +207,20 @@ macro_rules! insert {
     }};
 }
 
+/// Asserts that a scan has the specified records, for example:
+///
+/// ```ignore
+/// let mut scan = TableScan::new(...);
+///
+/// assert_table_scan_results![
+///     scan,
+///     (1, "joe", 2021, 10),
+///     (2, "amy", 2020, 20),
+///     (3, "max", 2022, 10)
+/// ];
+/// ```
 #[macro_export]
-macro_rules! assert_scan_results {
+macro_rules! assert_table_scan_results {
         ($scan:expr, $( ($($val:expr),*) ),*) => {{
             use crate::scan::scan::{Scan, Scannable};
         use crate::parser::constant::{FromDynamic};

@@ -52,7 +52,7 @@ pub fn create_default_tables(db: &mut SimpleDB) {
 
     let enroll_schema = make_schema! {
         "eid" => i32,
-        "student_id" => i32,
+        "sid" => i32,
         "section_id" => i32,
         "grade" => varchar(10)
     };

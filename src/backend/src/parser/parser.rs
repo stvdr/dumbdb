@@ -1,4 +1,6 @@
 use std::{fmt::Display, iter::Peekable};
+use std::iter::Zip;
+use std::slice::Iter;
 
 use super::{
     constant::Value,
@@ -19,6 +21,12 @@ pub struct DeleteNode(pub TableName, pub Option<Predicate>);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct InsertNode(pub TableName, pub Vec<FieldName>, pub Vec<Value>);
+
+impl InsertNode {
+    pub fn fields(&self) -> Zip<Iter<'_, FieldName>, Iter<'_, Value>> {
+        self.1.iter().zip(self.2.iter())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SelectField {
@@ -132,6 +140,7 @@ impl<'a> Parser<'a> {
         let next_token = self.next_token()?;
         match next_token {
             Token::Identifier(id) => Ok(Expression::Field(id)),
+            // TODO: remove duplication between the `parse_constant` fn and the below code
             Token::VarcharConst(val) => Ok(Expression::Constant(Value::Varchar(val))),
             Token::IntegerConst(val) => Ok(Expression::Constant(Value::Int(val))),
             _ => Err(format!(

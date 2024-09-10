@@ -1,6 +1,10 @@
 use crate::{index::index::Index, parser::constant::Value, rid::RID, table_scan::TableScan};
+use crate::scan::index_join_scan::IndexJoinScan;
 
-use super::{product::ProductScan, project::ProjectScan, select::SelectScan};
+use super::{
+    index_select_scan::IndexSelectScan, product_scan::ProductScan, project_scan::ProjectScan,
+    select_scan::SelectScan,
+};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ScanError {
@@ -15,6 +19,9 @@ pub enum Scan {
     Select(SelectScan),
     Project(ProjectScan),
     Product(ProductScan),
+
+    IndexSelect(IndexSelectScan),
+    IndexJoin(IndexJoinScan),
 }
 
 impl Scannable for Scan {
@@ -24,6 +31,9 @@ impl Scannable for Scan {
             Scan::Select(scan) => scan.before_first(),
             Scan::Project(scan) => scan.before_first(),
             Scan::Product(scan) => scan.before_first(),
+
+            Scan::IndexSelect(scan) => scan.before_first(),
+            Scan::IndexJoin(scan) => scan.before_first(),
         }
     }
 
@@ -33,6 +43,9 @@ impl Scannable for Scan {
             Scan::Select(scan) => scan.next(),
             Scan::Project(scan) => scan.next(),
             Scan::Product(scan) => scan.next(),
+
+            Scan::IndexSelect(scan) => scan.next(),
+            Scan::IndexJoin(scan) => scan.next(),
         }
     }
 
@@ -42,6 +55,9 @@ impl Scannable for Scan {
             Scan::Select(scan) => scan.get_int(field_name),
             Scan::Project(scan) => scan.get_int(field_name),
             Scan::Product(scan) => scan.get_int(field_name),
+
+            Scan::IndexSelect(scan) => scan.get_int(field_name),
+            Scan::IndexJoin(scan) => scan.get_int(field_name),
         }
     }
 
@@ -51,6 +67,9 @@ impl Scannable for Scan {
             Scan::Select(scan) => scan.get_string(field_name),
             Scan::Project(scan) => scan.get_string(field_name),
             Scan::Product(scan) => scan.get_string(field_name),
+
+            Scan::IndexSelect(scan) => scan.get_string(field_name),
+            Scan::IndexJoin(scan) => scan.get_string(field_name),
         }
     }
 
@@ -60,6 +79,9 @@ impl Scannable for Scan {
             Scan::Select(scan) => scan.get_val(field_name),
             Scan::Project(scan) => scan.get_val(field_name),
             Scan::Product(scan) => scan.get_val(field_name),
+
+            Scan::IndexSelect(scan) => scan.get_val(field_name),
+            Scan::IndexJoin(scan) => scan.get_val(field_name),
         }
     }
 
@@ -69,6 +91,9 @@ impl Scannable for Scan {
             Scan::Select(scan) => scan.has_field(field_name),
             Scan::Project(scan) => scan.has_field(field_name),
             Scan::Product(scan) => scan.has_field(field_name),
+
+            Scan::IndexSelect(scan) => scan.has_field(field_name),
+            Scan::IndexJoin(scan) => scan.has_field(field_name),
         }
     }
 
@@ -78,6 +103,9 @@ impl Scannable for Scan {
             Scan::Select(scan) => scan.close(),
             Scan::Project(scan) => scan.close(),
             Scan::Product(scan) => scan.close(),
+
+            Scan::IndexSelect(scan) => scan.close(),
+            Scan::IndexJoin(scan) => scan.close(),
         }
     }
 }
