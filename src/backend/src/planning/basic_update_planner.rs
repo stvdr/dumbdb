@@ -17,23 +17,32 @@ use super::{
     update_planner::{RowCount, UpdatePlanner},
 };
 
-struct BasicUpdatePlanner {
-    metadata_mgr: Arc<RwLock<MetadataManager>>,
+pub struct BasicUpdatePlanner {
+    metadata_mgr: Arc<MetadataManager>,
 }
 
 impl UpdatePlanner for BasicUpdatePlanner {
-    fn execute_create(
+    fn execute_insert(
         &mut self,
-        create: &CreateNode,
+        insert: &InsertNode,
         tx: Arc<Mutex<Tx>>,
     ) -> Result<RowCount, String> {
-        match create {
-            CreateNode::Table(name, fields) => self.create_table(name, fields, &tx),
-            CreateNode::View(name, select) => self.create_view(name, select, &tx),
-            CreateNode::Index(name, tblname, fieldname) => {
-                self.create_index(name, tblname, fieldname)
-            }
+        let layout = self
+            .metadata_mgr
+            .get_table_layout(&insert.0, &tx)
+            .ok_or(format!("table '{}' does not exist", &insert.0));
+
+        let mut plan: Box<dyn Plan> =
+            { Box::new(TablePlan::new(tx, &insert.0, &self.metadata_mgr)) };
+
+        let mut scan = plan.open();
+        scan.insert();
+        let field_values = insert.1.iter().zip(insert.2.iter());
+        for (field_name, val) in field_values {
+            scan.set_val(field_name, val);
         }
+
+        Ok(1)
     }
 
     fn execute_delete(
@@ -42,8 +51,8 @@ impl UpdatePlanner for BasicUpdatePlanner {
         tx: Arc<Mutex<Tx>>,
     ) -> Result<RowCount, String> {
         let mut plan: Box<dyn Plan> = {
-            let mut lmm = self.metadata_mgr.write().unwrap();
-            Box::new(TablePlan::new(tx, &delete.0, &mut lmm))
+            //let mut lmm = self.metadata_mgr.write().unwrap();
+            Box::new(TablePlan::new(tx, &delete.0, &self.metadata_mgr))
         };
 
         if let Some(pred) = &delete.1 {
@@ -61,41 +70,13 @@ impl UpdatePlanner for BasicUpdatePlanner {
         Ok(count)
     }
 
-    fn execute_insert(
-        &mut self,
-        insert: &InsertNode,
-        tx: Arc<Mutex<Tx>>,
-    ) -> Result<RowCount, String> {
-        let layout = self
-            .metadata_mgr
-            .read()
-            .unwrap()
-            .get_table_layout(&insert.0, &tx)
-            .ok_or(format!("table '{}' does not exist", &insert.0));
-
-        let mut plan: Box<dyn Plan> = {
-            let mut lmm = self.metadata_mgr.write().unwrap();
-            Box::new(TablePlan::new(tx, &insert.0, &mut lmm))
-        };
-
-        let mut scan = plan.open();
-        scan.insert();
-        let field_values = insert.1.iter().zip(insert.2.iter());
-        for (field_name, val) in field_values {
-            scan.set_val(field_name, val);
-        }
-
-        Ok(1)
-    }
-
     fn execute_modify(
         &mut self,
         update: &UpdateNode,
         tx: Arc<Mutex<Tx>>,
     ) -> Result<RowCount, String> {
         let mut plan: Box<dyn Plan> = {
-            let mut lmm = self.metadata_mgr.write().unwrap();
-            let table_plan = Box::new(TablePlan::new(tx, &update.id, &mut lmm));
+            let table_plan = Box::new(TablePlan::new(tx, &update.id, &self.metadata_mgr));
 
             if let Some(pred) = &update.where_clause {
                 // Wrap the table plan in a select plan so records can be filtered by the predicate
@@ -114,10 +95,24 @@ impl UpdatePlanner for BasicUpdatePlanner {
         }
         Ok(count)
     }
+
+    fn execute_create(
+        &mut self,
+        create: &CreateNode,
+        tx: Arc<Mutex<Tx>>,
+    ) -> Result<RowCount, String> {
+        match create {
+            CreateNode::Table(name, fields) => self.create_table(name, fields, &tx),
+            CreateNode::View(name, select) => self.create_view(name, select, &tx),
+            CreateNode::Index(name, tblname, fieldname) => {
+                self.create_index(name, tblname, fieldname)
+            }
+        }
+    }
 }
 
 impl BasicUpdatePlanner {
-    pub fn new(metadata_mgr: Arc<RwLock<MetadataManager>>) -> Self {
+    pub fn new(metadata_mgr: Arc<MetadataManager>) -> Self {
         Self { metadata_mgr }
     }
 
@@ -136,9 +131,8 @@ impl BasicUpdatePlanner {
         select: &SelectNode,
         tx: &Arc<Mutex<Tx>>,
     ) -> Result<RowCount, String> {
-        let lock = self.metadata_mgr.write().unwrap();
         let view_source = format!("{}", select);
-        lock.create_view(name, &view_source, tx);
+        self.metadata_mgr.create_view(name, &view_source, tx);
 
         Ok(0)
     }
@@ -150,8 +144,7 @@ impl BasicUpdatePlanner {
         tx: &Arc<Mutex<Tx>>,
     ) -> Result<RowCount, String> {
         let schema = Schema::from_field_defs(fields);
-        let mm = self.metadata_mgr.write().unwrap();
-        mm.create_table(name, &schema, tx);
+        self.metadata_mgr.create_table(name, &schema, tx);
         Ok(0)
     }
 }
@@ -166,8 +159,8 @@ mod tests {
         assert_table_scan_results,
         layout::Layout,
         make_schema,
-        parser::{
-            parser::{parse, CreateNode, DeleteNode, FieldDefinition, FieldType, Parser, RootNode},
+        parser::parser::{
+            parse, CreateNode, DeleteNode, FieldDefinition, FieldType, Parser, RootNode,
         },
         planning::update_planner::UpdatePlanner,
         table_scan::TableScan,
@@ -197,7 +190,7 @@ mod tests {
 
             let mut scan = TableScan::new(
                 tx.clone(),
-                mm.read().unwrap().get_table_layout("student", &tx).unwrap(),
+                mm.get_table_layout("student", &tx).unwrap(),
                 "student",
             );
 
@@ -218,7 +211,7 @@ mod tests {
             panic!("failed to parse insert statement");
         }
     }
-    
+
     #[test]
     fn test_plan_delete_all_statement() {
         let testdir = tempdir().unwrap();
@@ -238,13 +231,11 @@ mod tests {
 
             let mut scan = TableScan::new(
                 tx.clone(),
-                mm.read().unwrap().get_table_layout("student", &tx).unwrap(),
+                mm.get_table_layout("student", &tx).unwrap(),
                 "student",
             );
 
-            assert_table_scan_results![
-                scan,
-            ];
+            assert_table_scan_results![scan,];
         } else {
             panic!("failed to parse delete statement");
         }
@@ -268,7 +259,7 @@ mod tests {
 
             let mut scan = TableScan::new(
                 tx.clone(),
-                mm.read().unwrap().get_table_layout("student", &tx).unwrap(),
+                mm.get_table_layout("student", &tx).unwrap(),
                 "student",
             );
 
@@ -309,7 +300,7 @@ mod tests {
 
             let mut scan = TableScan::new(
                 tx.clone(),
-                mm.read().unwrap().get_table_layout("student", &tx).unwrap(),
+                mm.get_table_layout("student", &tx).unwrap(),
                 "student",
             );
 
@@ -351,8 +342,6 @@ mod tests {
 
         let tx = Arc::new(Mutex::new(db.new_tx()));
         let layout = mm
-            .read()
-            .unwrap()
             .get_table_layout("test", &tx)
             .expect("test table was not created");
 
@@ -392,8 +381,6 @@ mod tests {
 
         let tx = Arc::new(Mutex::new(db.new_tx()));
         let view_def = mm
-            .read()
-            .unwrap()
             .get_view_def(&"test_view", &tx)
             .expect("Did not find test view");
         assert_eq!(view_def, "SELECT sid FROM student");

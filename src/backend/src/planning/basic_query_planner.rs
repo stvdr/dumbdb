@@ -15,12 +15,12 @@ use super::{
     select_plan::SelectPlan, table_plan::TablePlan,
 };
 
-struct BasicQueryPlanner {
-    metadata_mgr: Arc<RwLock<MetadataManager>>,
+pub struct BasicQueryPlanner {
+    metadata_mgr: Arc<MetadataManager>,
 }
 
 impl BasicQueryPlanner {
-    pub fn new(metadata_mgr: Arc<RwLock<MetadataManager>>) -> Self {
+    pub fn new(metadata_mgr: Arc<MetadataManager>) -> Self {
         Self { metadata_mgr }
     }
 }
@@ -33,8 +33,6 @@ impl QueryPlanner for BasicQueryPlanner {
         for tblname in &data.tables {
             let view_def = self
                 .metadata_mgr
-                .read()
-                .unwrap()
                 .get_view_def(&tblname, &tx);
 
             // Check whether the table name matches a view definition
@@ -53,8 +51,7 @@ impl QueryPlanner for BasicQueryPlanner {
                     }
                 }
                 None => {
-                    let mut locked_mgr = self.metadata_mgr.write().unwrap();
-                    Box::new(TablePlan::new(tx.clone(), tblname, &mut locked_mgr))
+                    Box::new(TablePlan::new(tx.clone(), tblname, &self.metadata_mgr))
                 }
             };
 

@@ -40,7 +40,6 @@ impl ConcurrencyManager {
     /// * `blk` - The block to lock.
     pub fn xlock(&mut self, blk: &BlockId) {
         if !self.has_xlock(blk) {
-            // TODO: I don't really understand why an slock needs to be taken before the xlock
             self.slock(blk);
             self.lock_tbl.xlock(blk);
             self.locks.insert(blk.clone(), 'X');

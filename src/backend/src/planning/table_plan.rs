@@ -22,7 +22,7 @@ pub struct TablePlan {
 }
 
 impl TablePlan {
-    pub fn new(tx: Arc<Mutex<Tx>>, tbl_name: &str, meta_mgr: &mut MetadataManager) -> Self {
+    pub fn new(tx: Arc<Mutex<Tx>>, tbl_name: &str, meta_mgr: &MetadataManager) -> Self {
         let layout = meta_mgr
             .get_table_layout(&tbl_name, &tx)
             .expect(&format!("cannot find table: {}", tbl_name));

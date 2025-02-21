@@ -15,38 +15,35 @@ use crate::transaction::Tx;
 use std::sync::{Arc, Mutex, RwLock};
 
 struct IndexUpdatePlanner {
-    metadata_mgr: Arc<RwLock<MetadataManager>>,
+    metadata_mgr: Arc<MetadataManager>,
 }
 
 impl IndexUpdatePlanner {
-    pub fn new(metadata_manager: Arc<RwLock<MetadataManager>>) -> Self {
+    pub fn new(metadata_manager: Arc<MetadataManager>) -> Self {
         Self {
             metadata_mgr: metadata_manager,
         }
     }
 
     fn create_index(
-        &mut self,
+        &self,
         name: &str,
         tblname: &str,
         fieldname: &str,
         tx: &Arc<Mutex<Tx>>,
     ) -> Result<RowCount, String> {
-        let lock = self.metadata_mgr.write().unwrap();
-
-        lock.create_index(name, tblname, fieldname, tx)?;
+        self.metadata_mgr.create_index(name, tblname, fieldname, tx)?;
         Ok(0)
     }
 
     fn create_view(
-        &mut self,
+        &self,
         name: &str,
         select: &SelectNode,
         tx: &Arc<Mutex<Tx>>,
     ) -> Result<RowCount, String> {
-        let lock = self.metadata_mgr.write().unwrap();
         let view_source = format!("{}", select);
-        lock.create_view(name, &view_source, tx)?;
+        self.metadata_mgr.create_view(name, &view_source, tx)?;
 
         Ok(0)
     }
@@ -58,8 +55,7 @@ impl IndexUpdatePlanner {
         tx: &Arc<Mutex<Tx>>,
     ) -> Result<RowCount, String> {
         let schema = Schema::from_field_defs(fields);
-        let mm = self.metadata_mgr.write().unwrap();
-        if !mm.create_table(name, &schema, tx) {
+        if !self.metadata_mgr.create_table(name, &schema, tx) {
             Err("Failed to create table".to_string())
         } else {
             Ok(0)
@@ -76,14 +72,11 @@ impl UpdatePlanner for IndexUpdatePlanner {
         let table_name = &insert.0;
         let layout = self
             .metadata_mgr
-            .read()
-            .unwrap()
             .get_table_layout(table_name, &tx)
             .ok_or(format!("table '{}' does not exist", table_name))?;
 
         let mut table_plan: Box<dyn Plan> = {
-            let mut lmm = self.metadata_mgr.write().unwrap();
-            Box::new(TablePlan::new(tx.clone(), table_name, &mut lmm))
+            Box::new(TablePlan::new(tx.clone(), table_name, &self.metadata_mgr))
         };
 
         let mut table_scan = table_plan.open();
@@ -93,8 +86,6 @@ impl UpdatePlanner for IndexUpdatePlanner {
         // Insert into any indexes that exist on columns
         let column_indexes = self
             .metadata_mgr
-            .read()
-            .unwrap()
             .get_index_info(table_name, tx.clone());
 
         for (name, val) in insert.fields() {
@@ -118,14 +109,11 @@ impl UpdatePlanner for IndexUpdatePlanner {
         let table_name = &delete.0;
         let layout = self
             .metadata_mgr
-            .read()
-            .unwrap()
             .get_table_layout(table_name, &tx)
             .ok_or(format!("table '{}' does not exist", table_name))?;
 
         let mut plan: Box<dyn Plan> = {
-            let mut lmm = self.metadata_mgr.write().unwrap();
-            Box::new(TablePlan::new(tx.clone(), table_name, &mut lmm))
+            Box::new(TablePlan::new(tx.clone(), table_name, &self.metadata_mgr))
         };
 
         if let Some(pred) = &delete.1 {
@@ -136,8 +124,6 @@ impl UpdatePlanner for IndexUpdatePlanner {
 
         let column_indexes = self
             .metadata_mgr
-            .read()
-            .unwrap()
             .get_index_info(table_name, tx.clone());
 
         let mut count = 0;
@@ -170,14 +156,11 @@ impl UpdatePlanner for IndexUpdatePlanner {
 
         let layout = self
             .metadata_mgr
-            .read()
-            .unwrap()
             .get_table_layout(table_name, &tx)
             .ok_or(format!("table '{}' does not exist", table_name))?;
 
         let mut plan: Box<dyn Plan> = {
-            let mut lmm = self.metadata_mgr.write().unwrap();
-            Box::new(TablePlan::new(tx.clone(), table_name, &mut lmm))
+            Box::new(TablePlan::new(tx.clone(), table_name, &self.metadata_mgr))
         };
 
         if let Some(pred) = &modify.where_clause {
@@ -186,8 +169,6 @@ impl UpdatePlanner for IndexUpdatePlanner {
 
         let ii = self
             .metadata_mgr
-            .read()
-            .unwrap()
             .get_index_info(table_name, tx.clone());
 
         let mut idx = ii.get(field_name).map(|i| i.open());
@@ -270,7 +251,7 @@ mod tests {
 
             let mut scan = TableScan::new(
                 tx.clone(),
-                mm.read().unwrap().get_table_layout("student", &tx).unwrap(),
+                mm.get_table_layout("student", &tx).unwrap(),
                 "student",
             );
 
@@ -311,7 +292,7 @@ mod tests {
 
             let mut scan = TableScan::new(
                 tx.clone(),
-                mm.read().unwrap().get_table_layout("student", &tx).unwrap(),
+                mm.get_table_layout("student", &tx).unwrap(),
                 "student",
             );
 
@@ -339,7 +320,7 @@ mod tests {
 
             let mut scan = TableScan::new(
                 tx.clone(),
-                mm.read().unwrap().get_table_layout("student", &tx).unwrap(),
+                mm.get_table_layout("student", &tx).unwrap(),
                 "student",
             );
 
@@ -380,7 +361,7 @@ mod tests {
 
             let mut scan = TableScan::new(
                 tx.clone(),
-                mm.read().unwrap().get_table_layout("student", &tx).unwrap(),
+                mm.get_table_layout("student", &tx).unwrap(),
                 "student",
             );
 
@@ -422,8 +403,6 @@ mod tests {
 
         let tx = Arc::new(Mutex::new(db.new_tx()));
         let layout = mm
-            .read()
-            .unwrap()
             .get_table_layout("test", &tx)
             .expect("test table was not created");
 
@@ -463,8 +442,6 @@ mod tests {
 
         let tx = Arc::new(Mutex::new(db.new_tx()));
         let view_def = mm
-            .read()
-            .unwrap()
             .get_view_def(&"test_view", &tx)
             .expect("Did not find test view");
         assert_eq!(view_def, "SELECT sid FROM student");

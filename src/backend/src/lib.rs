@@ -12,7 +12,7 @@ mod buffer;
 mod buffer_list;
 mod buffer_manager;
 mod concurrency_manager;
-mod db;
+pub mod db;
 mod eviction_policy;
 mod file_manager;
 mod layout;
@@ -28,6 +28,6 @@ mod transaction;
 
 mod index;
 mod metadata;
-mod parser;
-mod planning;
+pub mod parser;
+pub mod planning;
 mod scan;

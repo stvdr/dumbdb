@@ -110,7 +110,7 @@ impl MetadataManager {
     }
 
     pub fn get_stat_info(
-        &mut self,
+        &self,
         tbl_name: &str,
         layout: &Layout,
         tx: &Arc<Mutex<Tx>>,

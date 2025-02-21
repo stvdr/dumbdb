@@ -35,9 +35,6 @@ pub struct LockTable {
     locks: Arc<Mutex<HashMap<BlockId, Arc<Lock>>>>,
 }
 
-//unsafe impl Send for LockTable {}
-//unsafe impl Sync for LockTable {}
-
 impl LockTable {
     pub fn new() -> Self {
         Self {

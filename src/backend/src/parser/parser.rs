@@ -442,6 +442,7 @@ impl<'a> Parser<'a> {
     }
 }
 
+// TODO: return error other than `String`
 pub fn parse(text: &str) -> Result<RootNode, String> {
     Parser::new(Lexer::new(text)).parse()
 }

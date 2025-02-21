@@ -1,9 +1,11 @@
 use std::{
-    fs,
     path::Path,
     sync::{Arc, Mutex, RwLock},
 };
 
+use crate::planning::basic_query_planner::BasicQueryPlanner;
+use crate::planning::basic_update_planner::BasicUpdatePlanner;
+use crate::planning::planner::Planner;
 use crate::{
     buffer_manager::BufferManager,
     eviction_policy::SimpleEvictionPolicy,
@@ -21,7 +23,8 @@ pub struct SimpleDB {
     file_manager: Arc<FileManager>,
     lock_table: Arc<LockTable>,
     log_manager: Arc<Mutex<LogManager>>,
-    metadata_manager: Arc<RwLock<MetadataManager>>,
+    metadata_manager: Arc<MetadataManager>,
+    planner: Arc<Mutex<Planner>>,
 }
 
 impl SimpleDB {
@@ -43,9 +46,14 @@ impl SimpleDB {
             lock_table.clone(),
         )));
 
-        let metadata_manager = Arc::new(RwLock::new(MetadataManager::new(&tx)));
+        let metadata_manager = Arc::new(MetadataManager::new(&tx));
 
         tx.lock().unwrap().commit();
+
+        let planner = Arc::new(Planner::new(
+            Box::new(BasicQueryPlanner::new(metadata_manager.clone())),
+            Box::new(BasicUpdatePlanner::new(metadata_manager.clone())),
+        ));
 
         Self {
             buffer_manager,
@@ -53,6 +61,7 @@ impl SimpleDB {
             log_manager,
             lock_table,
             metadata_manager,
+            planner,
         }
     }
 
@@ -81,7 +90,11 @@ impl SimpleDB {
         self.log_manager.clone()
     }
 
-    pub fn metadata_manager(&self) -> Arc<RwLock<MetadataManager>> {
+    pub fn metadata_manager(&self) -> Arc<MetadataManager> {
         self.metadata_manager.clone()
+    }
+
+    pub fn planner(&mut self) -> Arc<Mutex<Planner>> {
+        self.planner.clone()
     }
 }
