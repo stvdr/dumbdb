@@ -1,4 +1,4 @@
-use tracing::{span, trace, trace_span};
+use tracing::{trace, trace_span};
 
 use crate::{
     block_id::BlockId,
@@ -8,11 +8,29 @@ use crate::{
     log_manager::LogManager,
 };
 use std::{
-    fmt::write,
-    sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use std::collections::HashMap;
+
+#[derive(Debug)]
+pub enum BufferManagerError {
+    LockPoisoned,
+    NoAvailableBuffers,
+    BufferWithoutBlock,
+}
+
+impl std::fmt::Display for BufferManagerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BufferManagerError::LockPoisoned => write!(f, "lock poisoned"),
+            BufferManagerError::NoAvailableBuffers => write!(f, "no available buffers"),
+            BufferManagerError::BufferWithoutBlock => write!(f, "buffer does not contain a block"),
+        }
+    }
+}
+
+impl std::error::Error for BufferManagerError {}
 
 pub struct BufferManager<E: EvictionPolicy = SimpleEvictionPolicy> {
     unused: Vec<usize>,
@@ -67,7 +85,7 @@ impl<E: EvictionPolicy> BufferManager<E> {
     }
 
     // TODO: Error Checking
-    pub fn pin(&mut self, blk: &BlockId) -> Arc<RwLock<Buffer>> {
+    pub fn pin(&mut self, blk: &BlockId) -> Result<Arc<RwLock<Buffer>>, BufferManagerError> {
         let buf_index = match self.blk_to_buf.get(&blk) {
             Some(buf_index) => {
                 let _span = trace_span!("bufmgr-pin", bufidx = buf_index).entered();
@@ -76,7 +94,7 @@ impl<E: EvictionPolicy> BufferManager<E> {
 
                 // The block is loaded into an existing buffer
                 let arc = self.buffers[*buf_index].clone();
-                let mut buf = arc.write().unwrap();
+                let mut buf = arc.write().map_err(|_| BufferManagerError::LockPoisoned)?;
                 if !buf.is_pinned() {
                     // If the buffer was not pinned, the number of available buffers has
                     // must be decremented
@@ -99,13 +117,13 @@ impl<E: EvictionPolicy> BufferManager<E> {
                     .pop()
                     .or_else(|| self.get_evicted_buffer())
                     // TODO: condition variable to notify waiting threads on buffer availability
-                    .expect("No available buffers");
+                    .ok_or(BufferManagerError::NoAvailableBuffers)?;
 
                 let _span = trace_span!("bufmgr-pin", bufidx = buf_index).entered();
 
                 // Take a write lock on the unused buffer so the block can be loaded
                 let arc = self.buffers[buf_index].clone();
-                let mut unused_buf = arc.write().unwrap();
+                let mut unused_buf = arc.write().map_err(|_| BufferManagerError::LockPoisoned)?;
 
                 // If the buffer was already holding a block, make sure we are no longer mapping
                 // the block to a buffer
@@ -130,7 +148,7 @@ impl<E: EvictionPolicy> BufferManager<E> {
         // The page is no longer evictable, it has been pinned
         self.eviction_policy.remove(buf_index);
 
-        Arc::clone(&self.buffers[buf_index])
+        Ok(Arc::clone(&self.buffers[buf_index]))
     }
 
     /// Unpin a buffer. The provided buffer will have a write lock taken for the duration of this
@@ -139,9 +157,9 @@ impl<E: EvictionPolicy> BufferManager<E> {
     /// # Arguments
     ///
     /// * `buffer` - The buffer to unpin.
-    pub fn unpin(&mut self, buffer: &Arc<RwLock<Buffer>>) {
-        let mut buffer = buffer.write().unwrap();
-        self.unpin_locked(&mut buffer);
+    pub fn unpin(&mut self, buffer: &Arc<RwLock<Buffer>>) -> Result<(), BufferManagerError> {
+        let mut buffer = buffer.write().map_err(|_| BufferManagerError::LockPoisoned)?;
+        self.unpin_locked(&mut buffer)
     }
 
     // TODO: error checking
@@ -150,10 +168,10 @@ impl<E: EvictionPolicy> BufferManager<E> {
     /// # Arguments
     ///
     /// * `buffer` - A mutable reference to a Buffer.
-    fn unpin_locked(&mut self, buffer: &mut Buffer) {
+    fn unpin_locked(&mut self, buffer: &mut Buffer) -> Result<(), BufferManagerError> {
         buffer.unpin();
         if !buffer.is_pinned() {
-            let b = buffer.blk.as_ref().unwrap();
+            let b = buffer.blk.as_ref().ok_or(BufferManagerError::BufferWithoutBlock)?;
             if let Some(buf_index) = self.blk_to_buf.get(b) {
                 trace!("Marking buffer {} as available for eviction", buf_index);
                 self.eviction_policy.add(*buf_index);
@@ -161,17 +179,19 @@ impl<E: EvictionPolicy> BufferManager<E> {
             self.num_available += 1;
             trace!("Incremented available buffers to {}", self.num_available());
         }
+        Ok(())
     }
 
     // TODO: error checking
-    pub fn flush_all(&mut self, tx_num: i64) {
+    pub fn flush_all(&mut self, tx_num: i64) -> Result<(), BufferManagerError> {
         for buf in self.buffers.iter() {
             let arc = buf.clone();
-            let mut b = arc.write().unwrap();
+            let mut b = arc.write().map_err(|_| BufferManagerError::LockPoisoned)?;
             if b.tx_num == tx_num {
                 b.flush();
             }
         }
+        Ok(())
     }
 }
 
@@ -211,28 +231,28 @@ mod tests {
 
         assert_eq!(bm.num_available(), 3);
 
-        let buf1 = bm.pin(&BlockId::new("test", 0));
+        let buf1 = bm.pin(&BlockId::new("test", 0)).unwrap();
         assert_eq!(bm.num_available(), 2);
 
-        let buf2 = bm.pin(&BlockId::new("test", 1));
+        let buf2 = bm.pin(&BlockId::new("test", 1)).unwrap();
         assert_eq!(bm.num_available(), 1);
 
-        let buf3 = bm.pin(&BlockId::new("test", 2));
+        let buf3 = bm.pin(&BlockId::new("test", 2)).unwrap();
         assert_eq!(bm.num_available(), 0);
 
-        let buf3_2 = bm.pin(&BlockId::new("test", 2));
+        let buf3_2 = bm.pin(&BlockId::new("test", 2)).unwrap();
         assert_eq!(bm.num_available(), 0);
 
-        bm.unpin(&buf1);
+        bm.unpin(&buf1).unwrap();
         assert_eq!(bm.num_available(), 1);
 
-        bm.unpin(&buf2);
+        bm.unpin(&buf2).unwrap();
         assert_eq!(bm.num_available(), 2);
 
-        bm.unpin(&buf3);
+        bm.unpin(&buf3).unwrap();
         assert_eq!(bm.num_available(), 2);
 
-        bm.unpin(&buf3_2);
+        bm.unpin(&buf3_2).unwrap();
         assert_eq!(bm.num_available(), 3);
     }
 
@@ -269,11 +289,13 @@ mod tests {
             handles.push(thread::spawn(move || {
                 for i in 0..num_pages_per_thread {
                     let mut lock = bm.lock().unwrap();
-                    let buf = lock.pin(&BlockId::new("test", (t * num_pages_per_thread) + i));
+                    let buf = lock
+                        .pin(&BlockId::new("test", (t * num_pages_per_thread) + i))
+                        .unwrap();
                     {
                         let mut wb = buf.write().unwrap();
                         wb.page.write((t * num_pages_per_thread) + i, 0);
-                        lock.unpin_locked(&mut wb);
+                        lock.unpin_locked(&mut wb).unwrap();
                     }
                 }
             }));
@@ -285,13 +307,13 @@ mod tests {
 
         let mut bm_lock = bm.lock().unwrap();
         for p in 0..num_threads * num_pages_per_thread {
-            let buf = bm_lock.pin(&BlockId::new("test", p));
+            let buf = bm_lock.pin(&BlockId::new("test", p)).unwrap();
             {
                 let mut wb = buf.write().unwrap();
                 let val: u64 = wb.page.read(0);
 
                 assert_eq!(val, p);
-                bm_lock.unpin_locked(&mut wb);
+                bm_lock.unpin_locked(&mut wb).unwrap();
             }
         }
     }

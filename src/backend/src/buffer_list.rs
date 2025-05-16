@@ -42,7 +42,7 @@ impl BufferList {
         let buf = {
             // TODO: error handling
             let mut buf_mgr = self.buf_mgr.lock().unwrap();
-            buf_mgr.pin(blk)
+            buf_mgr.pin(blk).unwrap()
         };
         self.buffers.insert(blk.clone(), buf);
         self.pins.push(blk.clone());
@@ -58,7 +58,7 @@ impl BufferList {
             .expect(&format!("block does not exist in the BufferList: {}", blk));
         {
             let mut buf_mgr = self.buf_mgr.lock().unwrap();
-            buf_mgr.unpin(&buf);
+            buf_mgr.unpin(&buf).unwrap();
         }
 
         // TODO: do this in constant time
@@ -79,7 +79,7 @@ impl BufferList {
             let buf = self.buffers.get(blk).unwrap();
             {
                 let mut buf_mgr = self.buf_mgr.lock().unwrap();
-                buf_mgr.unpin(&buf);
+                buf_mgr.unpin(&buf).unwrap();
             }
         }
         self.buffers.clear();
