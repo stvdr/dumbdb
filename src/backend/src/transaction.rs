@@ -65,7 +65,12 @@ impl Tx {
     }
 
     pub fn commit(&mut self) {
-        self.buffer_mgr.lock().unwrap().flush_all(self.tx_num);
+        self
+            .buffer_mgr
+            .lock()
+            .unwrap()
+            .flush_all(self.tx_num)
+            .unwrap();
         let log_record = LogRecord::Commit {
             tx_num: self.tx_num,
         };
@@ -101,7 +106,12 @@ impl Tx {
             }
         }
 
-        self.buffer_mgr.lock().unwrap().flush_all(self.tx_num);
+        self
+            .buffer_mgr
+            .lock()
+            .unwrap()
+            .flush_all(self.tx_num)
+            .unwrap();
         let log_record = LogRecord::Rollback {
             tx_num: self.tx_num,
         };
@@ -133,7 +143,12 @@ impl Tx {
     }
 
     fn recover(&mut self) {
-        self.buffer_mgr.lock().unwrap().flush_all(self.tx_num);
+        self
+            .buffer_mgr
+            .lock()
+            .unwrap()
+            .flush_all(self.tx_num)
+            .unwrap();
 
         let mut completed_txs: Vec<i64> = vec![];
         let log_snapshot = self.log_mgr.lock().unwrap().snapshot();
@@ -155,7 +170,12 @@ impl Tx {
         }
         // TODO: recovery
 
-        self.buffer_mgr.lock().unwrap().flush_all(self.tx_num);
+        self
+            .buffer_mgr
+            .lock()
+            .unwrap()
+            .flush_all(self.tx_num)
+            .unwrap();
         self.append_to_log_and_flush(&LogRecord::Checkpoint);
     }
 
