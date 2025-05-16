@@ -7,9 +7,7 @@ use crate::{
     file_manager::FileManager,
     log_manager::LogManager,
 };
-use std::{
-    sync::{Arc, Mutex, RwLock},
-};
+use std::sync::{Arc, Mutex, RwLock};
 
 use std::collections::HashMap;
 
@@ -84,7 +82,6 @@ impl<E: EvictionPolicy> BufferManager<E> {
         self.eviction_policy.evict()
     }
 
-    // TODO: Error Checking
     pub fn pin(&mut self, blk: &BlockId) -> Result<Arc<RwLock<Buffer>>, BufferManagerError> {
         let buf_index = match self.blk_to_buf.get(&blk) {
             Some(buf_index) => {
@@ -158,11 +155,12 @@ impl<E: EvictionPolicy> BufferManager<E> {
     ///
     /// * `buffer` - The buffer to unpin.
     pub fn unpin(&mut self, buffer: &Arc<RwLock<Buffer>>) -> Result<(), BufferManagerError> {
-        let mut buffer = buffer.write().map_err(|_| BufferManagerError::LockPoisoned)?;
+        let mut buffer = buffer
+            .write()
+            .map_err(|_| BufferManagerError::LockPoisoned)?;
         self.unpin_locked(&mut buffer)
     }
 
-    // TODO: error checking
     /// Unpin a buffer. This method can be used when a write lock has already been taken on a buffer.
     ///
     /// # Arguments
@@ -171,7 +169,10 @@ impl<E: EvictionPolicy> BufferManager<E> {
     fn unpin_locked(&mut self, buffer: &mut Buffer) -> Result<(), BufferManagerError> {
         buffer.unpin();
         if !buffer.is_pinned() {
-            let b = buffer.blk.as_ref().ok_or(BufferManagerError::BufferWithoutBlock)?;
+            let b = buffer
+                .blk
+                .as_ref()
+                .ok_or(BufferManagerError::BufferWithoutBlock)?;
             if let Some(buf_index) = self.blk_to_buf.get(b) {
                 trace!("Marking buffer {} as available for eviction", buf_index);
                 self.eviction_policy.add(*buf_index);
@@ -182,7 +183,6 @@ impl<E: EvictionPolicy> BufferManager<E> {
         Ok(())
     }
 
-    // TODO: error checking
     pub fn flush_all(&mut self, tx_num: i64) -> Result<(), BufferManagerError> {
         for buf in self.buffers.iter() {
             let arc = buf.clone();
